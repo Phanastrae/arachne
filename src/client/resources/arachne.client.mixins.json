@@ -1,0 +1,22 @@
+{
+  "required": true,
+  "package": "phanastrae.arachne.mixin.client",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "CameraMixin",
+    "CreativeInventoryScreenMixin",
+    "EntityRenderDispatcherMixin",
+    "GameRendererMixin",
+    "HeldItemRendererMixin",
+    "InGameHudMixin",
+    "ItemGroupsAccessor",
+    "MinecraftClientMixin",
+    "ScreenAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "mixins": [
+    "InGameOverlayRendererMixin"
+  ]
+}

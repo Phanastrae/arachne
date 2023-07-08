@@ -1,0 +1,41 @@
+{
+	"schemaVersion": 1,
+	"id": "arachne",
+	"version": "${version}",
+	"name": "Arachne",
+	"description": "Arachne is a mod themed around strings, cloth, and weaving",
+	"authors": [
+		"Phanastrae"
+	],
+	"contact": {
+		"homepage": "",
+		"sources": ""
+	},
+	"license": "MIT",
+	"icon": "assets/arachne/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"phanastrae.arachne.Arachne"
+		],
+		"client": [
+			"phanastrae.arachne.ArachneClient"
+		]
+	},
+	"accessWidener": "arachne.accesswidener",
+	"mixins": [
+		"arachne.mixins.json",
+		{
+			"config": "arachne.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.14.21",
+		"minecraft": "~1.20.1",
+		"java": ">=17",
+		"fabric-api": "*"
+	},
+	"suggests": {
+	}
+}

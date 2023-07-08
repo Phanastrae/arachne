@@ -1,0 +1,25 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "P": {
+      "item": "minecraft:paper"
+    },
+    "B": {
+      "item": "minecraft:blue_dye"
+    },
+    "W": {
+      "item": "minecraft:white_dye"
+    }
+  },
+  "pattern": [
+    "PPP",
+    "BWB",
+    "PPP"
+  ],
+  "result": {
+    "count": 6,
+    "item": "arachne:sketch"
+  },
+  "show_notification": true
+}

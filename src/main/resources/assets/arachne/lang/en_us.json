@@ -1,0 +1,56 @@
+{
+  "arachne.editTool.vertices" : "Vertices",
+  "arachne.editTool.edges" : "Edges",
+  "arachne.editTool.faces" : "Faces",
+
+  "arachne.editTool.select.name" : "Select Tool",
+  "arachne.editTool.select.nameShort" : "SELECT",
+  "arachne.editTool.drag.name" : "Drag Tool",
+  "arachne.editTool.drag.nameShort" : "DRAG",
+  "arachne.editTool.stringLink.name" : "String Link Tool",
+  "arachne.editTool.stringLink.nameShort" : "LINK",
+  "arachne.editTool.staticToggle.name" : "Static Toggle Tool",
+  "arachne.editTool.staticToggle.nameShort" : "PIN",
+  "arachne.editTool.faceCreation.name" : "Face Creation Tool",
+  "arachne.editTool.faceCreation.nameShort" : "FACE",
+
+  "arachne.simpleAction.addNode" : "Add Node",
+  "arachne.simpleAction.addNode.short" : "+NODE",
+  "arachne.simpleAction.eraseNode" : "Erase Node",
+  "arachne.simpleAction.eraseNode.short" : "ERASE",
+  "arachne.simpleAction.spawnGrid" : "Spawn Grid",
+  "arachne.simpleAction.spawnGrid.short" : "+GRID",
+  "arachne.simpleAction.spawnCube" : "Spawn Cube",
+  "arachne.simpleAction.spawnCube.short" : "+CUBE",
+  "arachne.simpleAction.badSplit" : "Split the current link but in some weird and bad way like why would you do this",
+  "arachne.simpleAction.badSplit.short" : "SPLIT?",
+  "arachne.simpleAction.badFaceSplit" : "Do some questionable face subdivision",
+  "arachne.simpleAction.badFaceSplit.short" : "S-DIV?",
+  "arachne.simpleAction.toggleAltCam" : "Toggle Alt Camera Mode",
+  "arachne.simpleAction.toggleAltCam.short" : "ACM",
+  "arachne.simpleAction.toggleTime" : "Toggle Physics System",
+  "arachne.simpleAction.toggleTime.short" : "TIME",
+  "arachne.simpleAction.toggleWind" : "Toggle Wind",
+  "arachne.simpleAction.toggleWind.short" : "WIND",
+  "arachne.simpleAction.toggleNodeVisibility" : "Toggle Node Visibility",
+  "arachne.simpleAction.toggleNodeVisibility.short" : "N-VIS",
+  "arachne.simpleAction.toggleLinkVisibility" : "Toggle Link Visibility",
+  "arachne.simpleAction.toggleLinkVisibility.short" : "L-VIS",
+  "arachne.simpleAction.toggleFaceVisibility" : "Toggle Face Visibility",
+  "arachne.simpleAction.toggleFaceVisibility.short" : "F-VIS",
+
+  "arachne.tooltip.sketching_table": "Very WIP: Neither UI nor general functionality are final",
+  "arachne.tooltip.sketch_sketch": "Can be placed on %s",
+  "arachne.tooltip.sketch_weave": "Can be used in %s",
+
+  "block.arachne.mystic_loom" : "Mystic Loom",
+  "block.arachne.sketching_table" : "Sketching Table",
+
+  "item.arachne.sketch" : "Blank Sketch",
+  "item.arachne.filled_sketch" : "Filled Sketch",
+  "item.arachne.weave" : "Weave",
+
+  "itemGroup.arachne.group" : "Arachne",
+
+  "container.mystic_loom" : "Mystic Loom"
+}

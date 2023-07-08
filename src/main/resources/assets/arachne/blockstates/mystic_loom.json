@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=east": {
+      "model": "arachne:block/mystic_loom",
+      "y": 90
+    },
+    "facing=north": {
+      "model": "arachne:block/mystic_loom"
+    },
+    "facing=south": {
+      "model": "arachne:block/mystic_loom",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "arachne:block/mystic_loom",
+      "y": 270
+    }
+  }
+}
