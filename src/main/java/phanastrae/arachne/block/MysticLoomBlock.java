@@ -25,7 +25,7 @@ import org.jetbrains.annotations.Nullable;
 import phanastrae.arachne.networking.screen_handler.MysticLoomScreenHandler;
 
 public class MysticLoomBlock extends HorizontalFacingBlock {
-    private static final Text TITLE = Text.translatable("container.mystic_loom");
+    private static final Text TITLE = Text.translatable("container.arachne.mystic_loom");
 
     protected final VoxelShape[] shapes;
 

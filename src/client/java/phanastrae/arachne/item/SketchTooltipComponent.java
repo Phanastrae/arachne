@@ -8,15 +8,15 @@ import net.minecraft.nbt.NbtCompound;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import phanastrae.arachne.weave.WeaveCache;
+import phanastrae.arachne.weave.WeaveInstance;
 import phanastrae.arachne.weave.WeavePreviewRenderer;
-import phanastrae.arachne.weave.Weave;
 
 public class SketchTooltipComponent implements TooltipComponent {
 
     public static WeaveCache WEAVE_LAST = new WeaveCache();
 
     @Nullable
-    private final Weave weave;
+    private final WeaveInstance weave;
 
     public SketchTooltipComponent(SketchTooltipData data) {
         NbtCompound nbtCompound;
@@ -25,7 +25,7 @@ public class SketchTooltipComponent implements TooltipComponent {
             case WEAVE -> nbtCompound = WeaveCache.getNbtWeave(data.getNbt());
             default -> nbtCompound = null;
         }
-        this.weave = WEAVE_LAST.getOrMakeWeave(nbtCompound, Weave::new);
+        this.weave = WEAVE_LAST.getOrMakeWeave(nbtCompound);
     }
 
     public int PADDING = 3;

@@ -37,6 +37,7 @@ import phanastrae.arachne.setup.ModItems;
 import phanastrae.arachne.util.TableMultiblock;
 
 public class SketchingTableBlock extends BlockWithEntity {
+    private static final Text TITLE = Text.translatable("container.arachne.sketching_table");
     public static final BooleanProperty MARKED = BooleanProperty.of("marked");
 
     public SketchingTableBlock(Settings settings) {
@@ -158,12 +159,16 @@ public class SketchingTableBlock extends BlockWithEntity {
                 bp = pos;
             }
 
-            PropertyDelegate pd = new ArrayPropertyDelegate(3);
+            PropertyDelegate pd = new ArrayPropertyDelegate(6);
             pd.set(0, bp.getX());
             pd.set(1, bp.getY());
             pd.set(2, bp.getZ());
+            pd.set(3, pos.getX());
+            pd.set(4, pos.getY());
+            pd.set(5, pos.getZ());;
+
             return new SketchingTableScreenHandler(syncId, playerInventory, finalInventory, ScreenHandlerContext.create(world, bp), pd);
-        }, Text.literal("TEMP TEXT, IGNORE")); // TODO
+        }, TITLE);
     }
 
     @Override

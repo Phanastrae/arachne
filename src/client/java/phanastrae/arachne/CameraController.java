@@ -58,10 +58,11 @@ public class CameraController {
         PlayerEntity player = MinecraftClient.getInstance().player;
         if(player != null) {
             // TODO: check this works on server
-            if(MinecraftClient.getInstance().currentScreen instanceof EditorMainScreen mls) {
+            if(MinecraftClient.getInstance().currentScreen instanceof EditorMainScreen screen) {
                 CenteredPlane plane = new CenteredPlane(this.targetPos, getCameraLookVector(camera));
-                Line line = mls.mouseRayWorld;
-                Vec3d intersect = plane.intersectLine(line, 1/64f);
+                Line line = screen.editorInstance.getMouseRay(screen.mouseXtoScreenSpace(screen.lastMouseX),screen.mouseYtoScreenSpace(screen.lastMouseY));
+                Line lineGlobal = new Line(screen.localToGlobal(line.point), line.offset);
+                Vec3d intersect = plane.intersectLine(lineGlobal, 0);
 
                 if(intersect == null) {
                     intersect = targetPos;
@@ -69,7 +70,6 @@ public class CameraController {
 
                 // TODO: tweak values and how this works, it works okish but is not ideal
                 playerLookEyes(player, intersect, 10 * this.lerp);
-                playerLookBody(player, targetPos, 20 * this.lerp);
             }
         }
     }
@@ -233,30 +233,6 @@ public class CameraController {
         double yaw = -Math.toRadians(camera.getYaw());
         double pitch = -Math.toRadians(camera.getPitch());
         return new Vec3d(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
-    }
-
-    public static void playerLookBody(PlayerEntity player, Vec3d target, double maxAngleChangeDegrees) {
-        // disabled for now, the preexisting stuff to make the body stay near the head works fine
-        /*
-        Vector2d yawPitch = calcLookYawPitch(player.getPos(), target);
-        // if headyaw is close to idealyaw, want to turn bodyyaw towards idealyaw
-        double idealYaw = yawPitch.x;
-        double dif = (player.headYaw - idealYaw) % 360;
-        // get dif in range (-180, 180]
-        if(dif <= -180) dif += 360;
-        if(dif > 180) dif -= 360;
-
-        if(Math.abs(dif) < 15) {
-            double desiredMovement = (idealYaw - player.prevBodyYaw) % 360;
-            // get desiredMovement in range (-180, 180]
-            if(desiredMovement <= -180) desiredMovement += 360;
-            if(desiredMovement > 180) desiredMovement -= 360;
-
-            double actualMovement = clampAngle(desiredMovement, -maxAngleChangeDegrees, maxAngleChangeDegrees);
-            double newYaw = player.prevBodyYaw + actualMovement;
-            player.setBodyYaw((float)newYaw);
-        }
-        */
     }
 
     public static void playerLookEyes(PlayerEntity player, Vec3d target, double maxAngleChangeDegrees) {

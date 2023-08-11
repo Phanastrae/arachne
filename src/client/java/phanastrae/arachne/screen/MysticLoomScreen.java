@@ -12,7 +12,6 @@ import net.minecraft.util.Identifier;
 import org.jetbrains.annotations.Nullable;
 import phanastrae.arachne.Arachne;
 import phanastrae.arachne.networking.screen_handler.MysticLoomScreenHandler;
-import phanastrae.arachne.weave.Weave;
 import phanastrae.arachne.weave.WeaveCache;
 import phanastrae.arachne.weave.WeavePreviewRenderer;
 
@@ -51,7 +50,7 @@ public class MysticLoomScreen extends HandledScreen<MysticLoomScreenHandler> {
         if (!sketchSlot.hasStack()) {
             context.drawTexture(TEXTURE, this.x + sketchSlot.x, this.y + sketchSlot.y, this.backgroundWidth + 16, 0, 16, 16);
         }
-        WeavePreviewRenderer.render(this.weaveCache.getOrMakeWeave(nbtSketch, Weave::new), context, this.x + 103, this.y + 9, 64, 64, -1);
+        WeavePreviewRenderer.render(this.weaveCache.getOrMakeWeave(nbtSketch), context, this.x + 103, this.y + 9, 64, 64, -1);
     }
 
     private void onInventoryChanged() {

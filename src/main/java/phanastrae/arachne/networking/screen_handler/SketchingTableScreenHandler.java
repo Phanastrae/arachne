@@ -24,7 +24,7 @@ public class SketchingTableScreenHandler extends ScreenHandler {
     private TableMultiblock tableMultiblock;
 
     public SketchingTableScreenHandler(int syncId, PlayerInventory playerInventory) {
-        this(syncId, playerInventory, new SimpleInventory(1), ScreenHandlerContext.EMPTY, new ArrayPropertyDelegate(3));
+        this(syncId, playerInventory, new SimpleInventory(1), ScreenHandlerContext.EMPTY, new ArrayPropertyDelegate(6));
     }
 
     public SketchingTableScreenHandler(int syncId, PlayerInventory playerInventory, Inventory inventory, ScreenHandlerContext context, PropertyDelegate markerPosition) {
@@ -47,6 +47,10 @@ public class SketchingTableScreenHandler extends ScreenHandler {
 
     public Vec3i getPosition() {
         return new Vec3i(markerPosition.get(0), markerPosition.get(1), markerPosition.get(2));
+    }
+
+    public Vec3i getSketchPosition() {
+        return new Vec3i(markerPosition.get(3), markerPosition.get(4), markerPosition.get(5));
     }
 
     public TableMultiblock getTableMultiblock(World world) {

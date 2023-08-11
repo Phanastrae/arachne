@@ -80,7 +80,7 @@ public class SketchingTableRenderer implements BlockEntityRenderer<SketchingTabl
                     this.renderMultiblockBorder(tableMultiblock, matrixStack, vertexConsumerProvider, light, overlay);
                     if (!(MinecraftClient.getInstance().currentScreen instanceof EditorMainScreen editorMainScreen))
                         return;
-                    WeaveRenderer.render(editorMainScreen, tickDelta, matrixStack, vertexConsumerProvider, light, overlay);
+                    WeaveRenderer.render(editorMainScreen, tickDelta, matrixStack, vertexConsumerProvider, LightmapTextureManager.MAX_LIGHT_COORDINATE, overlay);
                 }
             }
         } catch (ArrayStoreException e) {

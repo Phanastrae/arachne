@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "down": "arachne:block/sketching_table_bottom",
+    "east": "arachne:block/sketching_table_side_frame",
+    "north": "arachne:block/sketching_table_side_frame",
+    "particle": "arachne:block/sketching_table_top",
+    "south": "arachne:block/sketching_table_side_frame",
+    "up": "arachne:block/sketching_table_top_frame_alt",
+    "west": "arachne:block/sketching_table_side_frame"
+  }
+}

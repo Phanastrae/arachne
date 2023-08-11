@@ -10,8 +10,10 @@ import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import phanastrae.arachne.Arachne;
 import phanastrae.arachne.networking.screen_handler.SketchingTableScreenHandler;
 import phanastrae.arachne.setup.ModItems;
+import phanastrae.arachne.weave.SketchWeave;
 
 import java.io.File;
 
@@ -74,10 +76,8 @@ public class EditorIntroScreen extends HandledScreen<SketchingTableScreenHandler
         if(firstTick) { // TODO: check on multiplayer/with lag? just in case
             firstTick = false;
 
-            if(itemStack.isOf(ModItems.FILLED_SKETCH)) {
-                EditorMainScreen mls = this.makeMLS();
-                mls.loadWeaveFromSketch(itemStack);
-                MinecraftClient.getInstance().setScreen(mls);
+            if(itemStack != null && itemStack.isOf(ModItems.FILLED_SKETCH)) {
+                loadSketch(itemStack);
             }
         }
     }
@@ -103,26 +103,25 @@ public class EditorIntroScreen extends HandledScreen<SketchingTableScreenHandler
         }
     }
 
-    public EditorMainScreen makeMLS() {
-        return new EditorMainScreen(this.getScreenHandler(), this.getScreenHandler().getPlayerInventory(), this.getTitle()); // TODO: check if good
+    public EditorMainScreen makeMLS(SketchWeave sketchWeave) {
+        return new EditorMainScreen(this.getScreenHandler(), this.getScreenHandler().getPlayerInventory(), this.getTitle(), sketchWeave);
+    }
+
+    public void loadSketch(ItemStack stack) {
+        EditorMainScreen mls = this.makeMLS(EditorMainScreen.loadFromSketch(stack));
+        mls.writeToItem = sketchPresent;
+        MinecraftClient.getInstance().setScreen(mls);
     }
 
     public void createNewWeave() {
-        EditorMainScreen mls = this.makeMLS();
-        // TODO: is this the best way to do this?
-        if(sketchPresent) {
-            mls.loadWeaveFromSketch(ItemStack.EMPTY);
-        }
+        EditorMainScreen mls = this.makeMLS(null);
+        mls.writeToItem = sketchPresent;
         MinecraftClient.getInstance().setScreen(mls);
     }
 
     public void loadLastWeave() {
-        EditorMainScreen mls = this.makeMLS();
-        mls.loadLastWeave();
-        // TODO: is this the best way to do this?
-        if(sketchPresent) {
-            mls.loadWeaveFromSketch(ItemStack.EMPTY);
-        }
+        EditorMainScreen mls = this.makeMLS(EditorMainScreen.loadFromFile(fileAutosave));
+        mls.writeToItem = sketchPresent;
         MinecraftClient.getInstance().setScreen(mls);
     }
 }

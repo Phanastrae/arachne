@@ -3,6 +3,9 @@
   "package": "phanastrae.arachne.mixin.client",
   "compatibilityLevel": "JAVA_17",
   "client": [
+    "BufferBuilderAccessor",
+    "BufferBuilderMixin",
+    "BufferBuilderStorageMixin",
     "CameraMixin",
     "CreativeInventoryScreenMixin",
     "EntityRenderDispatcherMixin",

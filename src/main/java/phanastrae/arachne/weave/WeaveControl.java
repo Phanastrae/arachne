@@ -17,8 +17,6 @@ import java.util.function.Function;
 
 public class WeaveControl {
 
-    public static Function<NbtCompound, Weave> newWeaveFunction = Weave::new; // this is set to PhysicsSystem::new in client // TODO: change how this works?
-
     public static void tickEntityWeaves(Entity entity) {
         if(entity.getWorld() == null || !entity.getWorld().isClient()) {
             // exit if not clientside
@@ -30,11 +28,7 @@ public class WeaveControl {
         // load newly added entity weaves and unload removed weaves
         loadEntityWeaves(entity);
 
-        // TODO: consider splitting physicsTicks between different frames instead of doing all at once for slightly smoother movement
-        // tick all tickable weaves
-        int STEPS = 8;
-        double dt = 1/20f;
-        forEachWeaveInEntity(entity, ((string, weaveCache) -> weaveCache.tick(dt, STEPS)));
+        forEachWeaveInEntity(entity, ((string, weaveCache) -> weaveCache.update(entity.getWorld())));
     }
 
     public static boolean canHoldWeaves(Entity entity) {
@@ -83,7 +77,7 @@ public class WeaveControl {
 
             for(int i = 0; i < nbts.length; i++) {
                 WeaveCache cacheMainHand = wch.getOrCreateWeaveCache(strings[i]);
-                cacheMainHand.getOrMakeWeave(nbts[i], newWeaveFunction);
+                cacheMainHand.getOrMakeWeave(nbts[i]);
             }
         }
     }

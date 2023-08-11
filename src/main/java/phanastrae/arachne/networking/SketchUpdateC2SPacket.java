@@ -2,6 +2,8 @@ package phanastrae.arachne.networking;
 
 import net.fabricmc.fabric.api.networking.v1.FabricPacket;
 import net.fabricmc.fabric.api.networking.v1.PacketType;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.inventory.Inventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
@@ -10,10 +12,15 @@ import net.minecraft.network.PacketByteBuf;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
+import phanastrae.arachne.Arachne;
+import phanastrae.arachne.block.blockentity.SketchingTableBlockEntity;
 import phanastrae.arachne.setup.ModItems;
 import phanastrae.arachne.networking.screen_handler.SketchingTableScreenHandler;
-import phanastrae.arachne.weave.Weave;
+import phanastrae.arachne.weave.NBTSerialization;
+import phanastrae.arachne.weave.SketchWeave;
+import phanastrae.old.Weave;
 
 import java.io.*;
 
@@ -22,74 +29,90 @@ public class SketchUpdateC2SPacket implements FabricPacket {
     // TODO consider some sort of rate limit and/or greater filtering
     // TODO might need a size limit
 
-    private final Weave weave;
+    private final SketchWeave sketchWeave;
+    private final int x;
+    private final int y;
+    private final int z;
 
-    public SketchUpdateC2SPacket(Weave weave) {
-        this.weave = weave;
+    public SketchUpdateC2SPacket(SketchWeave weave, int x, int y, int z) {
+        this.sketchWeave = weave;
+        this.x = x;
+        this.y = y;
+        this.z = z;
     }
 
     public SketchUpdateC2SPacket(PacketByteBuf buf) {
-        Weave weave1;
+        ByteArrayInputStream BAIS = new ByteArrayInputStream(buf.readByteArray());
+        this.x = buf.readInt();
+        this.y = buf.readInt();
+        this.z = buf.readInt();
+        NbtCompound nbt = null;
         try {
-            NbtCompound nbt = NbtIo.readCompressed(new ByteArrayInputStream(buf.readByteArray()));
-            weave1 = new Weave();
-            if(nbt != null) {
-                weave1.readFromNBT(nbt);
-            }
+            nbt = NbtIo.readCompressed(BAIS);
         } catch(IOException ignored) {
-            weave1 = null;
         }
-        this.weave = weave1;
+        if(nbt == null) {
+            this.sketchWeave = null;
+        } else {
+            this.sketchWeave = NBTSerialization.readSketchWeave(nbt);
+        }
     }
 
     public void write(PacketByteBuf buf) {
-        NbtCompound nbt = new NbtCompound();
-        weave.writeToNBT(nbt);
+        NbtCompound nbt = getNbt();
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            NbtIo.writeCompressed(nbt, baos);
-            buf.writeByteArray(baos.toByteArray());
+            if(nbt != null) {
+                NbtIo.writeCompressed(nbt, baos);
+            }
         } catch (IOException ignored) {
         }
+        buf.writeByteArray(baos.toByteArray());
+        buf.writeInt(this.x);
+        buf.writeInt(this.y);
+        buf.writeInt(this.z);
     }
 
     public void execute(MinecraftServer server, ServerPlayerEntity serverPlayerEntity) {
+        Arachne.LOGGER.info("Recieved Sketch Data from " + serverPlayerEntity.getName().getString());
         World world = serverPlayerEntity.getWorld();
         if(world == null) return;
-        ScreenHandler screenHandler = serverPlayerEntity.currentScreenHandler;
-        if(screenHandler instanceof SketchingTableScreenHandler stsh) {
-            ItemStack itemStack = stsh.getInventory().getStack(0);
-            if(itemStack == null || !(itemStack.isOf(ModItems.SKETCH) || itemStack.isOf(ModItems.FILLED_SKETCH))) return;
-            NbtCompound weaveNbt = this.getNbt();
-            boolean empty = weaveNbt.isEmpty();
-            Item item = empty ? ModItems.SKETCH : ModItems.FILLED_SKETCH;
 
-            ItemStack newStack = new ItemStack(item, itemStack.getCount());
-            NbtCompound nbt;
-            if(itemStack.getNbt() != null) {
-                nbt = itemStack.getNbt().copy();
-            } else {
-                nbt = new NbtCompound();
-            }
-            nbt.remove("sketchData");
-            if(!weaveNbt.isEmpty()) {
-                nbt.put("sketchData", weaveNbt);
-            }
-            if(!nbt.isEmpty()) {
-                newStack.setNbt(nbt);
-            }
-            stsh.getInventory().setStack(0, newStack);
+        // TODO make position check more strict?
+        if(serverPlayerEntity.getPos().subtract(this.x, this.y, this.z).length() > 16) return;
+        BlockPos pos = new BlockPos(this.x, this.y, this.z);
+
+        BlockEntity be = world.getBlockEntity(pos);
+        if(be == null) return;
+
+        if(!(be instanceof SketchingTableBlockEntity stbe)) return;
+
+        ItemStack itemStack = stbe.getStack(0);
+        if(itemStack == null || !(itemStack.isOf(ModItems.SKETCH) || itemStack.isOf(ModItems.FILLED_SKETCH))) return;
+        NbtCompound weaveNbt = this.getNbt();
+        if(weaveNbt == null) weaveNbt = new NbtCompound();
+        boolean empty = weaveNbt.isEmpty();
+        Item item = empty ? ModItems.SKETCH : ModItems.FILLED_SKETCH;
+
+        ItemStack newStack = new ItemStack(item, itemStack.getCount());
+        NbtCompound nbt;
+        if(itemStack.getNbt() != null) {
+            nbt = itemStack.getNbt().copy();
+        } else {
+            nbt = new NbtCompound();
         }
-    }
-
-    public Weave getWeave() {
-        return this.weave;
+        nbt.remove("sketchData");
+        if(!weaveNbt.isEmpty()) {
+            nbt.put("sketchData", weaveNbt);
+        }
+        if(!nbt.isEmpty()) {
+            newStack.setNbt(nbt);
+        }
+        stbe.setStack(0, newStack);
     }
 
     public NbtCompound getNbt() {
-        NbtCompound nbt = new NbtCompound();
-        this.weave.writeToNBT(nbt);
-        return nbt;
+        return sketchWeave == null ? null : NBTSerialization.writeSketchWeave(sketchWeave);
     }
 
     @Override

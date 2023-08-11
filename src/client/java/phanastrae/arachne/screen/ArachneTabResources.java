@@ -30,15 +30,10 @@ public class ArachneTabResources {
     // this gets called every time the creative menu is opened after a resource reload (including on launch)
     public static void addPrefabsToMenu(FabricItemGroupEntries entries) {
         for(NbtCompound nbt : entryList) {
-            String id = nbt.getString("fileId");
-            nbt.remove("fileId");
-
             ItemStack sketchStack = new ItemStack(ModItems.FILLED_SKETCH);
             ItemStack weaveStack = new ItemStack(ModItems.WEAVE);
             sketchStack.getOrCreateNbt().put("sketchData", nbt);
             weaveStack.getOrCreateNbt().put("weaveData", nbt.copy());
-            sketchStack.setCustomName(Text.of("Sketch: " + id));
-            weaveStack.setCustomName(Text.of("Weave: " + id));
             entries.add(sketchStack);
             entries.add(weaveStack);
         }

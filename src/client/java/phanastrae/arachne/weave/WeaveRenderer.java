@@ -1,5 +1,6 @@
 package phanastrae.arachne.weave;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.*;
 import net.minecraft.client.texture.MissingSprite;
@@ -13,20 +14,33 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.*;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
+import org.joml.*;
 import org.joml.Math;
-import org.joml.Matrix3f;
-import org.joml.Matrix4f;
-import org.joml.Vector4f;
+import phanastrae.arachne.Arachne;
+import phanastrae.arachne.ArachneClient;
 import phanastrae.arachne.CameraController;
-import phanastrae.arachne.ModRenderLayers;
-import phanastrae.arachne.screen.editor.EditorMainScreen;
-import phanastrae.arachne.weave.link_type.Link;
-import phanastrae.arachne.weave.link_type.StringLink;
-import phanastrae.arachne.screen.editor.tools.FaceCreationTool;
-import phanastrae.arachne.screen.editor.tools.SelectTool;
+import phanastrae.arachne.render.ModRenderLayers;
+import phanastrae.arachne.old.PhysicsSystem;
+import phanastrae.arachne.old.EditorMainScreen;
+import phanastrae.arachne.render.PosColorBufferBuilder;
+import phanastrae.arachne.render.SolidBufferBuilder;
+import phanastrae.arachne.util.ArachneMath;
+import phanastrae.arachne.weave.element.built.BuiltFace;
+import phanastrae.arachne.weave.element.built.BuiltRenderLayer;
+import phanastrae.arachne.weave.element.built.BuiltSettings;
+import phanastrae.arachne.weave.element.sketch.*;
+import phanastrae.old.Face;
+import phanastrae.old.Node;
+import phanastrae.old.Weave;
+import phanastrae.old.link_type.Link;
+import phanastrae.old.link_type.StringLink;
+import phanastrae.arachne.old.tools.FaceCreationTool;
+import phanastrae.arachne.old.tools.SelectTool;
 import phanastrae.arachne.util.TimerHolder;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Random;
 import java.util.function.Function;
 
@@ -36,10 +50,69 @@ public class WeaveRenderer {
         WeaveControl.forEachWeaveInEntity(entity, (string, weaveCache) -> renderEntityWeave(entity, weaveCache.getWeave(), yaw, tickDelta, matrices, vertexConsumers, light));
     }
 
-    public static void renderEntityWeave(Entity entity, @Nullable Weave weave, float yaw, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light) {
+    public static void renderEntityWeave(Entity entity, @Nullable WeaveInstance weave, float yaw, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light) {
         if(weave == null) return;
 
-        if(weave instanceof PhysicsSystem physicsSystem) {
+        if(shouldCull(weave, matrices)) return;
+
+        // TODO make movement work nice again
+
+        matrices.push();
+        matrices.translate(0, 0.5, 0);
+        WeaveRenderer.renderInstance(weave, tickDelta, matrices, vertexConsumers, light, 0); // TODO: overlay?
+        matrices.pop();
+    }
+
+    public static boolean shouldCull(WeaveInstance weave, MatrixStack matrices) {
+        BuiltSettings settings = weave.builtWeave.settings;
+        if(!settings.getDoCulling()) {
+            return false;
+        } else {
+            matrices.push();
+            matrices.translate(0, 0.5, 0);
+            matrices.scale((float)settings.getWidth(), (float)settings.getHeight(), (float)settings.getWidth());
+            Matrix4f projectionMatrix = RenderSystem.getProjectionMatrix();
+            Matrix4f modelViewMatrix = RenderSystem.getModelViewMatrix();
+            Matrix4f mat3 = matrices.peek().getPositionMatrix();
+            Matrix4f mat = new Matrix4f();
+            projectionMatrix.mul(modelViewMatrix, mat);
+            mat.mul(mat3, mat);
+
+            double minx = Double.POSITIVE_INFINITY;
+            double maxx = Double.NEGATIVE_INFINITY;
+            double miny = Double.POSITIVE_INFINITY;
+            double maxy = Double.NEGATIVE_INFINITY;
+            double minz = Double.POSITIVE_INFINITY;
+            double maxz = Double.NEGATIVE_INFINITY;
+            for(int i = 0; i < 8; i++) {
+                float x = (i & 0x1) == 0 ? -0.5f : 0.5f;
+                float y = (i & 0x2) == 0 ? -0.5f : 0.5f;
+                float z = (i & 0x4) == 0 ? -0.5f : 0.5f;
+                Vector4f v = mat.transform(new Vector4f(x, y, z, 1.0f));
+                v.div(v.w);
+                if(v.x < minx) minx = v.x;
+                if(v.y < miny) miny = v.y;
+                if(v.z < minz) minz = v.z;
+                if(maxx < v.x) maxx = v.x;
+                if(maxy < v.y) maxy = v.y;
+                if(maxz < v.z) maxz = v.z;
+            }
+            matrices.pop();
+
+            if(minx > 1) return true;
+            if(miny > 1) return true;
+            if(minz > 1) return true;
+            if(maxx < -1) return true;
+            if(maxy < -1) return true;
+            if(maxz < -1) return true;
+        }
+        return false;
+    }
+
+    public static void renderEntityWeave(Entity entity, @Nullable Weave weave, float yaw, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light) {
+        if (weave == null) return;
+
+        if (weave instanceof PhysicsSystem physicsSystem) {
             physicsSystem.windActive = true; // TODO
 
             Vec3d pos = entity.getLerpedPos(tickDelta).add(0, 0.5, 0);
@@ -59,18 +132,461 @@ public class WeaveRenderer {
     public static void render(Weave weave, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, int overlay) {
         VertexConsumer vcSolid = vertexConsumers.getBuffer(ModRenderLayers.getSolid());
         Vec3d worldOffset = new Vec3d(0, 0, 0);
-        if(weave instanceof PhysicsSystem physicsSystem && physicsSystem.lastPos != null) {
+        if (weave instanceof PhysicsSystem physicsSystem && physicsSystem.lastPos != null) {
             worldOffset = physicsSystem.lastPos;
         }
         MinecraftClient.getInstance().getProfiler().push("arachne");
         TimerHolder.dualPush("weave_renderer");
         TimerHolder.dualPush("faces");
-        for(Face face : weave.faces) {
+        for (Face face : weave.faces) {
             renderFace(tickDelta, vcSolid, matrices, face, worldOffset);
         }
         TimerHolder.dualPop();
         TimerHolder.dualPop();
         MinecraftClient.getInstance().getProfiler().pop();
+    }
+
+    public static void render(phanastrae.arachne.screen.editor.EditorMainScreen editorMainScreen, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, int overlay) {
+        Vec3i blockPos = editorMainScreen.getScreenHandler().getPosition();
+        Vec3d targetPos = CameraController.getInstance().targetPos;
+        Vec3d targetOffset = targetPos.subtract(blockPos.getX(), blockPos.getY(), blockPos.getZ());
+
+        matrices.push();
+        matrices.translate(0.5, 1.5, 0.5);
+        if(editorMainScreen.weaveInstance == null) {
+            renderSketch(editorMainScreen.editorInstance.getSketchWeave(), tickDelta, matrices, vertexConsumers, light, overlay);
+        } else {
+            renderInstance(editorMainScreen.weaveInstance, tickDelta, matrices, vertexConsumers, light, overlay);
+        }
+        editorMainScreen.editorInstance.render(tickDelta, matrices, vertexConsumers);
+        matrices.pop();
+
+
+        matrices.push();
+        matrices.translate(targetOffset.x, targetOffset.y, targetOffset.z);
+        renderCrosshair(matrices, vertexConsumers.getBuffer(RenderLayer.LINES));
+        matrices.pop();
+    }
+
+    public static void renderSketch(SketchWeave sketch, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, int overlay) {
+        VertexConsumerProvider.Immediate vcpi = ModRenderLayers.getBuffers();
+        setupNodeWorldPos(sketch);
+        renderNodes(sketch.nodes, matrices, vcpi);
+        renderEdges(sketch.edges, matrices, vcpi);
+        renderFaces(sketch.faces, matrices, vcpi);
+        //renderTransforms(sketch.getRigidBodies(), matrices, vcpi);
+        vcpi.draw();
+    }
+
+    public static void renderInstance(WeaveInstance instance, float tickDelta, MatrixStack matrixStack, VertexConsumerProvider vertexConsumers, int light, int overlay) {
+        instance.doLerp(tickDelta);
+
+        BuiltRenderLayer[] renderLayers = instance.builtWeave.renderLayers;
+        for(BuiltRenderLayer rl : renderLayers) {
+            renderLayer(rl, instance, tickDelta, matrixStack, vertexConsumers, light, overlay);
+        }
+        ModRenderLayers.getBuffers().draw();
+    }
+
+    public static void renderLayer(BuiltRenderLayer layer, WeaveInstance instance, float tickDelta, MatrixStack matrixStack, VertexConsumerProvider vertexConsumers, int light, int overlay) {
+        Identifier id = layer.getIdentifier();
+        boolean useAtlas = layer.getUseTextureAtlas();
+        long latestReload = ArachneClient.latestReload;
+        if(layer.needsUpdate(latestReload)) {
+            if (id != null && useAtlas) {
+                Function<Identifier, Sprite> ATLAS = MinecraftClient.getInstance().getSpriteAtlas(PlayerScreenHandler.BLOCK_ATLAS_TEXTURE);
+                Sprite sprite = ATLAS.apply(id);
+                if (sprite != null) {
+                    layer.setUVs(sprite.getMinU(), sprite.getMinV(), sprite.getMaxU(), sprite.getMaxV(), latestReload);
+                }
+            }
+        }
+
+        VertexConsumer vc = ModRenderLayers.getBuffers().getBuffer(useAtlas ? ModRenderLayers.getSolid() : ModRenderLayers.SOLID_TEXTURE.apply(id, true));
+        WeaveStateUpdater stateUpdater = instance.lerpWeaveStateUpdater;
+
+        ArrayList<BuiltFace> faces = layer.faces;
+        ArrayList<Byte> rs = layer.rs;
+        ArrayList<Byte> gs = layer.gs;
+        ArrayList<Byte> bs = layer.bs;
+        ArrayList<Byte> as = layer.as;
+        ArrayList<float[]> us = layer.usClean;
+        ArrayList<float[]> vs = layer.vsClean;
+        ArrayList<Float> uAvgs = layer.uAvgClean;
+        ArrayList<Float> vAvgs = layer.vAvgClean;
+
+        Matrix4f mat = matrixStack.peek().getPositionMatrix();
+
+        Direction[] directions = new Direction[]{Direction.EAST, Direction.WEST, Direction.UP, Direction.DOWN, Direction.SOUTH, Direction.NORTH};
+        float[] directionColors = new float[]{1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+        World world = MinecraftClient.getInstance().world;
+        if(world != null) {
+            for (int i = 0; i < 6; i++) {
+                directionColors[i] = world.getBrightness(directions[i], true);
+            }
+        }
+
+        SolidBufferBuilder sbb = null;
+        boolean SBB = vc instanceof SolidBufferBuilder;
+        if(SBB) sbb = (SolidBufferBuilder)vc;
+
+        for(int i = 0; i < faces.size(); i++) {
+            BuiltFace face = faces.get(i);
+            byte r = rs.get(i);
+            byte g = gs.get(i);
+            byte b = bs.get(i);
+            byte a = as.get(i);
+            float[] u = us.get(i);
+            float[] v = vs.get(i);
+            float uAvg = uAvgs.get(i);
+            float vAvg = vAvgs.get(i);
+
+            Vec3d p3 = face.getCenterPos(stateUpdater);
+            Vec3d faceNormal = face.getNormal(stateUpdater);
+            int l = face.nodes.length;
+            for (int j = 0; j < l; j++) {
+                int k = (j+1)%l;
+                float[] uvs = {u[j], v[j], u[k], v[k], uAvg, vAvg};
+                Vec3d p1 = face.getNodeInput(j, stateUpdater).getPosition();
+                Vec3d p2 = face.getNodeInput(k, stateUpdater).getPosition();
+                if(SBB) {
+                    drawTriangle(sbb, mat, p1, p2, p3, r, g, b, a, uvs, (float)faceNormal.x, (float)faceNormal.y, (float)faceNormal.z, directionColors, light);
+                    if (face.doubleSided) {
+                        uvs = new float[]{u[k], v[k], u[j], v[j], uAvg, vAvg};
+                        drawTriangle(sbb, mat, p2, p1, p3, r, g, b, a, uvs, -(float)faceNormal.x, -(float)faceNormal.y, -(float)faceNormal.z, directionColors, light);
+                    }
+                } else {
+                    drawTriangle(vc, mat, p1, p2, p3, r, g, b, a, uvs, (float)faceNormal.x, (float)faceNormal.y, (float)faceNormal.z, directionColors, light);
+                    if (face.doubleSided) {
+                        uvs = new float[]{u[k], v[k], u[j], v[j], uAvg, vAvg};
+                        drawTriangle(vc, mat, p2, p1, p3, r, g, b, a, uvs, -(float)faceNormal.x, -(float)faceNormal.y, -(float)faceNormal.z, directionColors, light);
+                    }
+                }
+            }
+        }
+    }
+
+    public static void drawTriangle(VertexConsumer vc, Matrix4f mat, Vec3d p1, Vec3d p2, Vec3d p3, byte r, byte g, byte b, byte a, float[] uvs, float nx, float ny, float nz, float[] directionColors, int light) {
+        float l = nx*nx*(nx > 0 ? directionColors[0] : directionColors[1])
+                + ny*ny*(ny > 0 ? directionColors[2] : directionColors[3])
+                + nz*nz*(nz > 0 ? directionColors[4] : directionColors[5]);
+        if(nx*nx+ny*ny+nz*nz == 0) { // if overall face normal is 0, set light to 1
+            l = 1.0f;
+        }
+
+        float rf = ((r&0xff) * l)/255f;
+        float gf = ((g&0xff) * l)/255f;
+        float bf = ((b&0xff) * l)/255f;
+        float af = a/255f;
+
+        Vector4f v1 = mat.transform(new Vector4f((float)p1.x, (float)p1.y, (float)p1.z, 1));
+        Vector4f v2 = mat.transform(new Vector4f((float)p2.x, (float)p2.y, (float)p2.z, 1));
+        Vector4f v3 = mat.transform(new Vector4f((float)p3.x, (float)p3.y, (float)p3.z, 1));
+
+        vc.vertex(v1.x, v1.y, v1.z, rf, gf, bf, af, uvs[0], uvs[1], 0, light, nx, ny, nz);
+        vc.vertex(v2.x, v2.y, v2.z, rf, gf, bf, af, uvs[2], uvs[3], 0, light, nx, ny, nz);
+        vc.vertex(v3.x, v3.y, v3.z, rf, gf, bf, af, uvs[4], uvs[5], 0, light, nx, ny, nz);
+    }
+
+    public static void drawTriangle(SolidBufferBuilder vc, Matrix4f mat, Vec3d p1, Vec3d p2, Vec3d p3, byte r, byte g, byte b, byte a, float[] uvs, float nx, float ny, float nz, float[] directionColors, int light) {
+        float l = nx*nx*(nx > 0 ? directionColors[0] : directionColors[1])
+            + ny*ny*(ny > 0 ? directionColors[2] : directionColors[3])
+            + nz*nz*(nz > 0 ? directionColors[4] : directionColors[5]);
+        if(nx*nx+ny*ny+nz*nz == 0) { // if overall face normal is 0, set light to 1
+            l = 1.0f;
+        }
+
+        byte rb = (byte)((r&0xff)*l);
+        byte gb = (byte)((g&0xff)*l);
+        byte bb = (byte)((b&0xff)*l);
+        byte ab = (byte)(a);
+
+        Vector4f v1 = mat.transform(new Vector4f((float)p1.x, (float)p1.y, (float)p1.z, 1));
+        Vector4f v2 = mat.transform(new Vector4f((float)p2.x, (float)p2.y, (float)p2.z, 1));
+        Vector4f v3 = mat.transform(new Vector4f((float)p3.x, (float)p3.y, (float)p3.z, 1));
+
+        vc.accept(v1, v2, v3, rb, gb, bb, ab, uvs, light, nx, ny, nz);
+    }
+
+    public static void renderCrosshair(MatrixStack matrices, VertexConsumer vcLines) {
+        float l = 1/32f;
+        matrices.push();
+        drawCrosshair(vcLines, matrices, 0, l);
+        matrices.pop();
+    }
+
+    static void setupNodeWorldPos(SketchWeave sketchWeave) {
+        MatrixStack matrices = new MatrixStack();
+        for(SketchTransform transform : sketchWeave.transforms) {
+            if(transform.parent == null) {
+                setupNodeWorldPosTree(transform, matrices);
+            }
+        }
+    }
+
+    static void setupNodeWorldPosTree(SketchTransform transform, MatrixStack matrices) {
+        if(transform.children == null) return;
+        matrices.push();
+        matrices.translate(transform.x, transform.y, transform.z);
+        matrices.multiply(new Quaternionf().rotateYXZ((float)transform.getYawRad(), (float)transform.getPitchRad(), (float)transform.getRollRad()));
+        matrices.scale((float)transform.sizex, (float)transform.sizey, (float)transform.sizez);
+        for(SketchElement el : transform.children) {
+            if(el instanceof SketchTransform e) {
+                setupNodeWorldPosTree(e, matrices);
+            } else if(el instanceof SketchVertex e) {
+                Vector4f v = new Vector4f((float)e.x, (float)e.y, (float)e.z, 1);
+                v = v.mul(matrices.peek().getPositionMatrix());
+                e.gx = v.x;
+                e.gy = v.y;
+                e.gz = v.z;
+            }
+        }
+        matrices.pop();
+    }
+
+    public static void renderNodes(List<SketchVertex> nodes, MatrixStack matrices, VertexConsumerProvider vertexConsumers) {
+        VertexConsumer circles = vertexConsumers.getBuffer(ModRenderLayers.getDisk());
+        Matrix4f posMatrix = matrices.peek().getPositionMatrix();
+        Camera camera = MinecraftClient.getInstance().gameRenderer.getCamera();
+        Vec3d camLook = CameraController.getCameraLookVector(camera);
+
+        double yaw = Math.toRadians(camera.getYaw());
+        double pitch = Math.toRadians(camera.getPitch());
+        float sy = (float)Math.sin(yaw);
+        float cy = (float)Math.cos(yaw);
+        float sp = (float)Math.sin(pitch);
+        float cp = (float)Math.cos(pitch);
+        for(SketchVertex node : nodes) {
+            Vec3d pos = new Vec3d(node.gx, node.gy, node.gz);
+            float x = (float)pos.x;
+            float y = (float)pos.y;
+            float z = (float)pos.z;
+            Vec3d offset = pos.add(CameraController.getInstance().originPos.subtract(camera.getPos()));
+            float d = (float)offset.dotProduct(camLook);
+            if(d > 1) {
+                d = 1;
+            }
+            d *= 1/4f;
+            float o1x = -sy*sp / 16 * d;
+            float o1y = cp / 16 * d;
+            float o1z = cy*sp / 16 * d;
+            float o2x = -cy / 16 * d;
+            float o2y = 0 * d;
+            float o2z = -sy / 16 * d;
+            int r;
+            int g;
+            int b;
+            if(node.highlighted) {
+                r = 255;
+                g = 255;
+                b = 255;
+            } else if(node.selected) {
+                r = 255;
+                g = 127;
+                b = 63;
+            } else {
+                r = 127;
+                g = 191;
+                b = 191;
+            }
+            circles.vertex(posMatrix, x+o1x+o2x, y+o1y+o2y, z+o1z+o2z).color(r, g, b, 255).texture(0, 0).next();
+            circles.vertex(posMatrix, x+o1x-o2x, y+o1y-o2y, z+o1z-o2z).color(r, g, b, 255).texture(1, 0).next();
+            circles.vertex(posMatrix, x-o1x-o2x, y-o1y-o2y, z-o1z-o2z).color(r, g, b, 255).texture(1, 1).next();
+            circles.vertex(posMatrix, x-o1x+o2x, y-o1y+o2y, z-o1z+o2z).color(r, g, b, 255).texture(0, 1).next();
+        }
+    }
+
+    public static void renderEdges(List<SketchEdge> edges, MatrixStack matrices, VertexConsumerProvider vertexConsumers) {
+        VertexConsumer lines = vertexConsumers.getBuffer(RenderLayer.LINES);
+        for(SketchEdge edge : edges) {
+            int r;
+            int g;
+            int b;
+            if(edge.highlighted) {
+                r = 255;
+                g = 255;
+                b = 255;
+            } else if(edge.selected) {
+                r = 255;
+                g = 127;
+                b = 63;
+            } else {
+                r = 127;
+                g = 191;
+                b = 191;
+            }
+            drawLine(lines, matrices, edge.start.gx, edge.start.gy, edge.start.gz, edge.end.gx, edge.end.gy, edge.end.gz, r, g, b, 255);
+        }
+    }
+
+    public static void renderFaces(List<SketchFace> faces, MatrixStack matrices, VertexConsumerProvider vertexConsumers) {
+        VertexConsumer vc = vertexConsumers.getBuffer(ModRenderLayers.getPosColorTriangles());
+        if(vc instanceof PosColorBufferBuilder pcbb) {
+            for (SketchFace face : faces) {
+                renderFace(pcbb, matrices, face);
+            }
+        }
+    }
+
+    public static void renderFace(PosColorBufferBuilder vc, MatrixStack matrices, SketchFace face) {
+        if(face.vertices.length < 3) return;
+        Vec3d camLook = CameraController.getCameraLookVector(MinecraftClient.getInstance().gameRenderer.getCamera());
+        int r;
+        int g;
+        int b;
+        if(face.highlighted) {
+            r = 0xDF;
+            g = 0xDF;
+            b = 0xDF;
+        } else if(face.selected) {
+            r = 0xDF;
+            g = 0x6F;
+            b = 0x2F;
+        } else {
+            r = 0x6F;
+            g = 0xAF;
+            b = 0xAF;
+        }
+        Vec3d avgPos = face.getAvgGlobalPos();
+        if(avgPos == null) return;
+        for(int i = 0; i < face.vertices.length; i++) {
+            Vec3d p1 = face.vertices[i].getLastGlobalPos();
+            Vec3d p2 = face.vertices[(i+1)%face.vertices.length].getLastGlobalPos();
+            drawTriangle(vc, matrices, p1, p2, avgPos, r, g, b, 0xFF, camLook);
+            if(face.isDoubleSided()) {
+                drawTriangle(vc, matrices, p2, p1, avgPos, r, g, b, 0xFF, camLook);
+            }
+        }
+    }
+
+
+    public static void drawTriangle(PosColorBufferBuilder pcbb, MatrixStack matrices, Vec3d p1, Vec3d p2, Vec3d p3, int r, int g, int b, int a, Vec3d camLook) {
+        Vec3d normal = ArachneMath.getNormal(p1, p2, p3);
+
+        // whilst in editor view, do lighting such that the camera provides the light
+        double lightMultiplier = 0.6 + 0.4 * (-normal.dotProduct(camLook));
+
+        byte rf = (byte) (r * lightMultiplier);
+        byte gf = (byte) (g * lightMultiplier);
+        byte bf = (byte) (b * lightMultiplier);
+
+        Matrix4f mat = matrices.peek().getPositionMatrix();
+        pcbb.accept(mat, p1, p2, p3, rf, gf, bf, (byte)(a&0xFF));
+    }
+
+    public static void drawLine(VertexConsumer vertexConsumer, MatrixStack matrices, double x1, double y1, double z1, double x2, double y2, double z2, int r, int g, int b, int a) {
+        // TODO: check if should be drawing min to max?
+        Matrix4f positionMatrix = matrices.peek().getPositionMatrix();
+        Matrix3f normalMatrix = matrices.peek().getNormalMatrix();
+        float k = (float)Math.abs(x1-x2);
+        float l = (float)Math.abs(y1-y2);
+        float m = (float)Math.abs(z1-z2);
+        float n = MathHelper.sqrt((k * k + l * l + m * m));
+        vertexConsumer.vertex(positionMatrix, (float)x1, (float)y1, (float)z1)
+                .color(r, g, b, a).normal(normalMatrix, k /= n, l /= n, m /= n).next();
+        vertexConsumer.vertex(positionMatrix, (float)x2, (float)y2, (float)z2)
+                .color(r, g, b, a).normal(normalMatrix, k, l, m).next();
+    }
+
+
+    public static void renderTransforms(List<SketchTransform> rigidBodies, MatrixStack matrices, VertexConsumerProvider vertexConsumers) {
+        // draws frames and axes for rigid bodies
+
+        VertexConsumer vcLines = vertexConsumers.getBuffer(RenderLayer.LINES);
+        for(SketchTransform rb : rigidBodies) {
+            if(rb.parent == null) {
+                drawTransformTree(vcLines, matrices, rb);
+            }
+        }
+    }
+
+    static void drawTransformTree(VertexConsumer vcLines, MatrixStack matrices, SketchTransform transform) {
+        matrices.push();
+        matrices.translate(transform.x, transform.y, transform.z);
+        // For some reason Vanilla's entity models use ZYX rotation and also some weird axis sign flipping, but just doing the vertical axis Y (yaw) first and
+        // also no axis sign flipping seems to make far more sense and is consistent with other similar editors,
+        // so Arachne RigidBodies will use that.
+        // The ordering of X and Z probably shouldn't matter as much, so YXZ will be used because
+        // 1) vanilla labels X pitch and Z roll and yaw->pitch->roll makes the most sense, and
+        // b) there is no Quaternionf().rotateYZX function
+        // negate angles so that rotation is clockwise about axes to be consistent with some other editors
+        matrices.multiply(new Quaternionf().rotateYXZ((float)transform.getYawRad(), (float)transform.getPitchRad(), (float)transform.getRollRad()));
+        matrices.scale((float)transform.sizex, (float)transform.sizey, (float)transform.sizez);
+        drawRigidBody(vcLines, matrices, transform);
+        if(transform.children != null) {
+            for (SketchElement child : transform.children) {
+                if(child instanceof SketchTransform t) {
+                    drawTransformTree(vcLines, matrices, t);
+                }
+            }
+        }
+        matrices.pop();
+    }
+
+    static void drawRigidBody(VertexConsumer vcLines, MatrixStack matrices, SketchTransform transform) {
+        drawCrosshair(vcLines, matrices, 0.375, 0.625);
+
+        int r;
+        int g;
+        int b;
+        if(transform.highlighted) {
+            r = 255;
+            g = 255;
+            b = 255;
+        } else if(transform.selected) {
+            r = 255;
+            g = 127;
+            b = 63;
+        } else if(!transform.canDelete()) {
+            r = 0x9F;
+            g = 0xAF;
+            b = 0xAF;
+        } else {
+            r = 127;
+            g = 191;
+            b = 191;
+        }
+
+        Vec3d vppp = new Vec3d(0.5, 0.5, 0.5);
+        Vec3d vppn = new Vec3d(0.5, 0.5, -0.5);
+        Vec3d vpnp = new Vec3d(0.5, -0.5, 0.5);
+        Vec3d vpnn = new Vec3d(0.5, -0.5, -0.5);
+        Vec3d vnpp = new Vec3d(-0.5, 0.5, 0.5);
+        Vec3d vnpn = new Vec3d(-0.5, 0.5, -0.5);
+        Vec3d vnnp = new Vec3d(-0.5, -0.5, 0.5);
+        Vec3d vnnn = new Vec3d(-0.5, -0.5, -0.5);
+        drawLine(vcLines, matrices, vppp, vppn, r, g, b, 0xFF);
+        drawLine(vcLines, matrices, vpnp, vpnn, r, g, b, 0xFF);
+        drawLine(vcLines, matrices, vnpp, vnpn, r, g, b, 0xFF);
+        drawLine(vcLines, matrices, vnnp, vnnn, r, g, b, 0xFF);
+        drawLine(vcLines, matrices, vppp, vpnp, r, g, b, 0xFF);
+        drawLine(vcLines, matrices, vppn, vpnn, r, g, b, 0xFF);
+        drawLine(vcLines, matrices, vnpp, vnnp, r, g, b, 0xFF);
+        drawLine(vcLines, matrices, vnpn, vnnn, r, g, b, 0xFF);
+        drawLine(vcLines, matrices, vppp, vnpp, r, g, b, 0xFF);
+        drawLine(vcLines, matrices, vppn, vnpn, r, g, b, 0xFF);
+        drawLine(vcLines, matrices, vpnp, vnnp, r, g, b, 0xFF);
+        drawLine(vcLines, matrices, vpnn, vnnn, r, g, b, 0xFF);
+
+    }
+
+    public static void face(VertexConsumer debug, int r, int g, int b, Matrix4f mat, float l) {
+        int R = (int)(r * l);
+        int G = (int)(g * l);
+        int B = (int)(b * l);
+        debug.vertex(mat, -1, 1, -1).color(R, G, B, 127).next();
+        debug.vertex(mat, 1, 1, -1).color(R, G, B, 127).next();
+        debug.vertex(mat, 1, 1, 1).color(R, G, B, 127).next();
+        debug.vertex(mat, -1, 1, 1).color(R, G, B, 127).next();
+    }
+
+    public static void drawCrosshair(VertexConsumer vc, MatrixStack matrices, double l1, double l2) {
+        drawLine(vc, matrices, new Vec3d(l1, 0, 0), new Vec3d(l2, 0, 0), 0xFF, 0, 0, 0xFF);
+        drawLine(vc, matrices, new Vec3d(0, l1, 0), new Vec3d(0, l2, 0), 0, 0xFF, 0, 0xFF);
+        drawLine(vc, matrices, new Vec3d(0, 0, l1), new Vec3d(0, 0, l2), 0, 0, 0xFF, 0xFF);
+        drawLine(vc, matrices, new Vec3d(-l1, 0, 0), new Vec3d(-l2, 0, 0), 0x7F, 0x3F, 0x3F, 0xFF);
+        drawLine(vc, matrices, new Vec3d(0, -l1, 0), new Vec3d(0, -l2, 0), 0x3F, 0x7F, 0x3F, 0xFF);
+        drawLine(vc, matrices, new Vec3d(0, 0, -l1), new Vec3d(0, 0, -l2), 0x3F, 0x3F, 0x7F, 0xFF);
     }
 
     public static void render(EditorMainScreen editorMainScreen, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, int overlay) {
@@ -144,7 +660,7 @@ public class WeaveRenderer {
                 int r = 0xFF;
                 int g = (int)(0xBf * (1 - t));
                 int b = (int)(0x6F * (1 - t));
-                renderLine(vcLines, matrices, link.node1.getPos(tickDelta), link.node2.getPos(tickDelta), r, g, b, 0xFF);
+                drawLine(vcLines, matrices, link.node1.getPos(tickDelta), link.node2.getPos(tickDelta), r, g, b, 0xFF);
             }
             matrices.pop();
         }
@@ -159,12 +675,12 @@ public class WeaveRenderer {
                 for(int i = 0; i < fctNodes.size() - 1; i++) {
                     Node n1 = fctNodes.get(i);
                     Node n2 = fctNodes.get(i + 1);
-                    renderLine(vcLines, matrices, n1.getPos(tickDelta), n2.getPos(tickDelta), 0xFF, 0x7F, 0x7F, 0xFF);
+                    drawLine(vcLines, matrices, n1.getPos(tickDelta), n2.getPos(tickDelta), 0xFF, 0x7F, 0x7F, 0xFF);
                 }
             }
             Node highlighted = editorMainScreen.highlightedNode;
             if(fctNodes.size() >= 1 && highlighted != null && (!fctNodes.contains(highlighted) || (highlighted == fctNodes.get(0) && fctNodes.size() >= 3))) {
-                renderLine(vcLines, matrices, fctNodes.get(fctNodes.size() - 1).getPos(tickDelta), editorMainScreen.highlightedNode.getPos(tickDelta), 0xFF, 0x3f, 0x3F, 0xFF);
+                drawLine(vcLines, matrices, fctNodes.get(fctNodes.size() - 1).getPos(tickDelta), editorMainScreen.highlightedNode.getPos(tickDelta), 0xFF, 0x3f, 0x3F, 0xFF);
             }
         }
         matrices.pop();
@@ -173,9 +689,8 @@ public class WeaveRenderer {
         float l = 1/32f;
         matrices.push();
         matrices.translate(-worldOffset.x, -worldOffset.y, -worldOffset.z);
-        renderLine(vcLines, matrices, targetPos.add(l, 0, 0), targetPos.add(-l, 0, 0), 0xFF, 0, 0, 0xFF);
-        renderLine(vcLines, matrices, targetPos.add(0, l, 0), targetPos.add(0, -l, 0), 0, 0xFF, 0, 0xFF);
-        renderLine(vcLines, matrices, targetPos.add(0, 0, l), targetPos.add(0, 0, -l), 0, 0, 0xFF, 0xFF);
+        matrices.translate(targetPos.x, targetPos.y, targetPos.z);
+        drawCrosshair(vcLines, matrices, 0, l);
         matrices.pop();
         TimerHolder.dualPop();
 
@@ -277,7 +792,7 @@ public class WeaveRenderer {
         MinecraftClient.getInstance().getProfiler().pop();
     }
 
-    public static void renderLine(VertexConsumer vertexConsumer, MatrixStack matrices, Vec3d point1, Vec3d point2, int r, int g, int b, int a) {
+    public static void drawLine(VertexConsumer vertexConsumer, MatrixStack matrices, Vec3d point1, Vec3d point2, int r, int g, int b, int a) {
         // TODO: check if should be drawing min to max?
         Matrix4f positionMatrix = matrices.peek().getPositionMatrix();
         Matrix3f normalMatrix = matrices.peek().getNormalMatrix();

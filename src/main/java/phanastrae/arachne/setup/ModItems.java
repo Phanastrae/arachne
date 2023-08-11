@@ -14,6 +14,7 @@ import net.minecraft.text.Text;
 import phanastrae.arachne.Arachne;
 import phanastrae.arachne.item.SketchItem;
 import phanastrae.arachne.item.SketchingTableItem;
+import phanastrae.arachne.item.WeaveControlItem;
 import phanastrae.arachne.item.WeaveItem;
 
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ public class ModItems {
     public static final Item WEAVE = new WeaveItem(new FabricItemSettings());
     public static final Item SKETCHING_TABLE = new SketchingTableItem(ModBlocks.SKETCHING_TABLE, new FabricItemSettings());
     public static final Item MYSTIC_LOOM = new BlockItem(ModBlocks.MYSTIC_LOOM, new FabricItemSettings());
+    public static final Item WEAVE_CONTROLLER = new WeaveControlItem(new FabricItemSettings().maxCount(1));
 
     public static final ItemGroup ARACHNE_GROUP = FabricItemGroup.builder()
             .icon(() -> new ItemStack(WEAVE))
@@ -37,6 +39,7 @@ public class ModItems {
         register(WEAVE, "weave");
         registerPlusMenu(SKETCHING_TABLE, "sketching_table");
         registerPlusMenu(MYSTIC_LOOM, "mystic_loom");
+        registerPlusMenu(WEAVE_CONTROLLER, "weave_controller");
 
         Registry.register(Registries.ITEM_GROUP, Arachne.id("arachne"), ARACHNE_GROUP);
     }

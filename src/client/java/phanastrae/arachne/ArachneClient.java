@@ -23,6 +23,7 @@ import net.minecraft.resource.ResourceManager;
 import net.minecraft.resource.ResourceType;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.profiler.Profiler;
+import phanastrae.arachne.render.ModShaders;
 import phanastrae.arachne.screen.ArachneTabResources;
 import phanastrae.arachne.screen.MysticLoomScreen;
 import phanastrae.arachne.setup.ModBlocks;
@@ -37,11 +38,7 @@ import phanastrae.arachne.item.SketchTooltipData;
 import phanastrae.arachne.setup.ModScreenHandlerTypes;
 import phanastrae.arachne.screen.editor.EditorIntroScreen;
 import phanastrae.arachne.screen.editor.EditorMainScreen;
-import phanastrae.arachne.weave.PhysicsSystem;
-import phanastrae.arachne.weave.WeaveControl;
 
-import java.io.BufferedReader;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -53,7 +50,6 @@ import java.util.concurrent.Executor;
 public class ArachneClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
-        WeaveControl.newWeaveFunction = PhysicsSystem::new;
         SketchingTableBlockEntity.TICK_EVENT = EditorMainScreen::tickFromBlockEntity;
 
         // setup for arachne tab custom reloading
@@ -92,7 +88,6 @@ public class ArachneClient implements ClientModInitializer {
         });
 
         ResourceManagerHelper.get(ResourceType.CLIENT_RESOURCES).registerReloadListener(new SimpleResourceReloadListener<List<NbtCompound>>() {
-            // TODO is this actually all correct
             @Override
             public Identifier getFabricId() {
                 return Arachne.id("resource_reload");
@@ -102,6 +97,7 @@ public class ArachneClient implements ClientModInitializer {
             public CompletableFuture<List<NbtCompound>> load(ResourceManager manager, Profiler profiler, Executor executor) {
                 return CompletableFuture.supplyAsync(() -> {
                     Map<Identifier, List<Resource>> map = manager.findAllResources("arachne_weaves", (a)->true);
+                    Arachne.LOGGER.info("um"+map.values());
                     List<NbtCompound> nbtList = new ArrayList<>();
                     map.forEach((identifier, resources) -> {
                         for(Resource res : resources) {
@@ -122,6 +118,7 @@ public class ArachneClient implements ClientModInitializer {
             @Override
             public CompletableFuture<Void> apply(List<NbtCompound> data, ResourceManager manager, Profiler profiler, Executor executor) {
                 return CompletableFuture.runAsync(() -> {
+                    ArachneClient.latestReload = System.nanoTime();
                     ArachneTabResources.needsReload = true;
                     ArachneTabResources.entryList.clear();
                     ArachneTabResources.entryList.addAll(data);
@@ -129,6 +126,9 @@ public class ArachneClient implements ClientModInitializer {
             }
         });
     }
+
+    // last pack reload time
+    public static long latestReload = Long.MIN_VALUE;
 
     public static WorldRenderEvents.BeforeBlockOutline listener() {
         return (context, hitResult) -> !(MinecraftClient.getInstance().currentScreen instanceof EditorMainScreen);

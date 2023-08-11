@@ -1,36 +1,43 @@
 package phanastrae.arachne.weave;
 
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
+import phanastrae.arachne.Arachne;
 
 import java.util.function.Function;
 
 public class WeaveCache {
 
     @Nullable
-    private Weave WEAVE_LAST;
+    private WeaveInstance WEAVE_LAST;
     @Nullable
     private NbtCompound NBT_LAST;
 
     @Nullable
-    public Weave getOrMakeWeave(@Nullable NbtCompound nbt, Function<NbtCompound, Weave> function) {
+    public WeaveInstance getOrMakeWeave(@Nullable NbtCompound nbt) {
         if (nbt != NBT_LAST) {
-            setWeave(nbt, function);
+            setWeave(nbt);
         }
         return WEAVE_LAST;
     }
 
-    private void setWeave(NbtCompound nbtSketch, Function<NbtCompound, Weave> function) {
+    private void setWeave(NbtCompound nbtSketch) {
         if(nbtSketch == null) {
             this.WEAVE_LAST = null;
         } else {
-            this.WEAVE_LAST = function.apply(nbtSketch);
+            SketchWeave sketchWeave = NBTSerialization.readSketchWeave(nbtSketch);
+            if(sketchWeave == null) {
+                this.WEAVE_LAST = null;
+            } else {
+                this.WEAVE_LAST = new WeaveInstance(sketchWeave.buildWeave());
+            }
         }
         this.NBT_LAST = nbtSketch;
     }
 
     @Nullable
-    public Weave getWeave() {
+    public WeaveInstance getWeave() {
         return this.WEAVE_LAST;
     }
 
@@ -40,15 +47,11 @@ public class WeaveCache {
         this.NBT_LAST = null;
     }
 
-    public void tick(double dt, int steps) {
-        if(steps < 1) return;
-        if(this.WEAVE_LAST instanceof WeaveTickable weaveTickable) {
-            weaveTickable.tick(dt, steps);
+    public void update(World world) {
+        if(this.WEAVE_LAST != null) {
+            this.WEAVE_LAST.preUpdate(world);
+            this.WEAVE_LAST.update();
         }
-    }
-
-    public void tick(double dt) {
-        this.tick(dt, 1);
     }
 
 
