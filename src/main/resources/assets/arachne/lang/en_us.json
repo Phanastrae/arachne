@@ -130,5 +130,7 @@
   "itemGroup.arachne.group" : "Arachne",
 
   "container.arachne.mystic_loom" : "Mystic Loom",
-  "container.arachne.sketching_table" : "Sketching Table"
+  "container.arachne.sketching_table" : "Sketching Table",
+
+  "entity.arachne.weave_entity" : "Weave"
 }
