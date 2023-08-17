@@ -11,12 +11,12 @@ import net.minecraft.util.math.RotationAxis;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import phanastrae.arachne.Arachne;
+import phanastrae.arachne.weave.element.built.BuiltSettings;
 import phanastrae.old.Weave;
 
 public class WeavePreviewRenderer {
 
     public static void render(@Nullable WeaveInstance weave, DrawContext context, int x, int y, int width, int height, int borderColor) {
-        // TODO doesn't look right on quilt
         if(weave == null) {
             return;
         }
@@ -43,16 +43,17 @@ public class WeavePreviewRenderer {
         matrices.translate(0, 0, 8);
         matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(30));
         matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees((-t * 2) % 360));
-        VertexConsumer vcLines = vertexConsumers.getBuffer(RenderLayer.LINES);
-        for(int i = -24; i <= 24; i++) {
-            for(int j = -24; j <= 24; j++) {
-                // TODO: set origin to actual base?
-                // TODO: make depth test actually work so i can have gridlines?
-                //WeaveRenderer.renderLine(vcLines, matrices, new Vec3d(i/4f, -0.5, -6), new Vec3d(i/4f, -0.5, 6), 255, 255 ,255,(int)(127/25f * (25 - Math.abs(i))));
-                //WeaveRenderer.renderLine(vcLines, matrices, new Vec3d(-6, -0.5, i/4f), new Vec3d(6, -0.5, i/4f), 255, 255 ,255,(int)(127/25f * (25 - Math.abs(i))));
-            }
-        }
         vertexConsumers.getBuffer(RenderLayer.getSolid()); // force draw TODO is this the way to do this
+
+        // scale preview
+        float scaleFactor = (float)(0.75 / (weave.builtWeave.getSmallestEncompassingCubeWidth() / 2));
+        if(Float.isFinite(scaleFactor)) {
+            if(scaleFactor < 0.01f) {
+                scaleFactor = 0.01f;
+            }
+            matrices.scale(scaleFactor, scaleFactor, scaleFactor);
+        }
+
         WeaveRenderer.renderInstance(weave, 0, matrices, vertexConsumers, LightmapTextureManager.MAX_LIGHT_COORDINATE, 0); // TODO overlay?
         matrices.pop();
         matrices.pop();
