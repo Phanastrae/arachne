@@ -1,8 +1,9 @@
 package phanastrae.arachne.screen.editor;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
+import net.minecraft.client.gui.Drawable;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.SimplePositioningWidget;
 import net.minecraft.client.gui.widget.TextWidget;
@@ -10,16 +11,17 @@ import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
-import phanastrae.arachne.Arachne;
+import phanastrae.arachne.mixin.client.ScreenAccessor;
 import phanastrae.arachne.networking.screen_handler.SketchingTableScreenHandler;
 import phanastrae.arachne.setup.ModItems;
 import phanastrae.arachne.weave.SketchWeave;
 
 import java.io.File;
 
-public class EditorIntroScreen extends HandledScreen<SketchingTableScreenHandler> {
+public class EditorIntroScreen extends EditorScreen<SketchingTableScreenHandler> {
+
     public EditorIntroScreen(SketchingTableScreenHandler handler, PlayerInventory inventory, Text title) {
-        super(handler, inventory, title);
+        super(handler, title);
     }
 
     public File fileAutosave = new File(MinecraftClient.getInstance().runDirectory, "arachne/weaves/autosave.dat");
@@ -55,8 +57,8 @@ public class EditorIntroScreen extends HandledScreen<SketchingTableScreenHandler
     boolean firstTick = true;
 
     @Override
-    protected void handledScreenTick() {
-        super.handledScreenTick();
+    public void tick() {
+        super.tick();
         tick++;
         if(tick > 40) {
             tick = 0;
@@ -85,14 +87,23 @@ public class EditorIntroScreen extends HandledScreen<SketchingTableScreenHandler
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         if(firstTick) return;
-        super.render(context, mouseX, mouseY, delta);
+
+        // super.render() without the unwanted parts
+        this.drawBackground(context, delta, mouseX, mouseY);
+        RenderSystem.disableDepthTest();
+        for (Drawable drawable : ((ScreenAccessor)this).getDrawables()) {
+            drawable.render(context, mouseX, mouseY, delta);
+        }
+        context.getMatrices().push();
+        context.getMatrices().translate(this.x, this.y, 0.0f);
+        this.drawForeground(context, mouseX, mouseY);
+        context.getMatrices().pop();
+        RenderSystem.enableDepthTest();
     }
 
-    @Override
     protected void drawForeground(DrawContext context, int mouseX, int mouseY) {
     }
 
-    @Override
     protected void drawBackground(DrawContext context, float delta, int mouseX, int mouseY) {
         this.renderBackground(context);
     }
@@ -123,5 +134,10 @@ public class EditorIntroScreen extends HandledScreen<SketchingTableScreenHandler
         EditorMainScreen mls = this.makeMLS(EditorMainScreen.loadFromFile(fileAutosave));
         mls.writeToItem = sketchPresent;
         MinecraftClient.getInstance().setScreen(mls);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 }

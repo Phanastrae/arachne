@@ -1,5 +1,6 @@
 package phanastrae.arachne.screen.editor;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
@@ -7,16 +8,12 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.Drawable;
 import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.Selectable;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.GridWidget;
 import net.minecraft.client.gui.widget.SimplePositioningWidget;
 import net.minecraft.client.gui.widget.Widget;
-import net.minecraft.client.model.ModelPart;
 import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.render.entity.model.EntityModelLayers;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
@@ -28,15 +25,17 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.math.Vec3i;
 import org.jetbrains.annotations.Nullable;
-import org.joml.Matrix4f;
 import org.joml.Vector2d;
-import org.joml.Vector4f;
 import org.lwjgl.glfw.GLFW;
 import phanastrae.arachne.Arachne;
 import phanastrae.arachne.CameraController;
-import phanastrae.arachne.editor.*;
-import phanastrae.arachne.editor.editor_actions.*;
+import phanastrae.arachne.editor.EditorInstance;
+import phanastrae.arachne.editor.EditorSelectionManager;
+import phanastrae.arachne.editor.EditorTabHandler;
+import phanastrae.arachne.editor.ToolBarWidget;
+import phanastrae.arachne.editor.editor_actions.EditorAction;
 import phanastrae.arachne.editor.editor_tabs.EditorTab;
+import phanastrae.arachne.mixin.client.ScreenAccessor;
 import phanastrae.arachne.networking.SketchUpdateC2SPacket;
 import phanastrae.arachne.networking.screen_handler.SketchingTableScreenHandler;
 import phanastrae.arachne.screen.widget.ListGridWidget;
@@ -47,7 +46,6 @@ import phanastrae.arachne.weave.NBTSerialization;
 import phanastrae.arachne.weave.SketchWeave;
 import phanastrae.arachne.weave.WeaveInstance;
 import phanastrae.arachne.weave.element.sketch.SketchElement;
-import phanastrae.arachne.weave.element.sketch.SketchTransform;
 
 import java.io.File;
 import java.io.IOException;
@@ -56,7 +54,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
 
-public class EditorMainScreen extends HandledScreen<SketchingTableScreenHandler> {
+public class EditorMainScreen extends EditorScreen<SketchingTableScreenHandler> {
 
     public final EditorInstance editorInstance;
 
@@ -76,7 +74,7 @@ public class EditorMainScreen extends HandledScreen<SketchingTableScreenHandler>
     public double lastMouseY = 0;
 
     public EditorMainScreen(SketchingTableScreenHandler handler, PlayerInventory inventory, Text title, SketchWeave sketchWeave) {
-        super(handler, inventory, title);
+        super(handler, title);
         this.editorInstance = new EditorInstance(this, sketchWeave);
         this.setup();
     }
@@ -143,7 +141,7 @@ public class EditorMainScreen extends HandledScreen<SketchingTableScreenHandler>
     }
 
     @Override
-    protected void handledScreenTick() {
+    public void tick() {
         if(this.propertyEditorWidget != null) {
             this.propertyEditorWidget.tick();
         }
@@ -174,7 +172,17 @@ public class EditorMainScreen extends HandledScreen<SketchingTableScreenHandler>
 
         this.editorInstance.tick(mouseX, mouseY);
 
-        super.render(context, mouseX, mouseY, delta);
+        // super.render() without the unwanted parts
+        this.drawBackground(context, delta, mouseX, mouseY);
+        RenderSystem.disableDepthTest();
+        for (Drawable drawable : ((ScreenAccessor)this).getDrawables()) {
+            drawable.render(context, mouseX, mouseY, delta);
+        }
+        context.getMatrices().push();
+        context.getMatrices().translate(this.x, this.y, 0.0f);
+        this.drawForeground(context, mouseX, mouseY);
+        context.getMatrices().pop();
+        RenderSystem.enableDepthTest();
     }
 
     void setup() {
@@ -356,7 +364,6 @@ public class EditorMainScreen extends HandledScreen<SketchingTableScreenHandler>
         super.close();
     }
 
-    @Override
     protected void drawBackground(DrawContext context, float delta, int mouseX, int mouseY) {
         context.drawText(this.textRenderer, "FPS: " + MinecraftClient.getInstance().getCurrentFps(), 0, 0, 0xFFFFFF, false);
         long l = Runtime.getRuntime().maxMemory();
@@ -392,7 +399,6 @@ public class EditorMainScreen extends HandledScreen<SketchingTableScreenHandler>
         }
     }
 
-    @Override
     protected void drawForeground(DrawContext context, int mouseX, int mouseY) {
         this.editorInstance.getSelectionManager().draw(context, mouseX, mouseY);
     }
