@@ -189,10 +189,12 @@ public class AddFaceTool extends BasicTool {
     @Override
     public void render(EditorInstance editorInstance, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers) {
         if(this.face != null && this.showFace) {
-            VertexConsumer vc = vertexConsumers.getBuffer(ModRenderLayers.getPosColorTriangles());
+            VertexConsumerProvider.Immediate buffers = ModRenderLayers.getBuffers();
+            VertexConsumer vc = buffers.getBuffer(ModRenderLayers.getPosColorTriangles());
             if(vc instanceof PosColorBufferBuilder pcbb) {
                 WeaveRenderer.renderFace(pcbb, matrices, this.face);
             }
+            buffers.draw();
             Vec3d mid = face.getAvgGlobalPos();
             Vec3d normal = face.getGlobalNormal();
             if(mid != null && normal != null) {
