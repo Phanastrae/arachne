@@ -11,6 +11,7 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.screen.PlayerScreenHandler;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.profiler.Profiler;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import phanastrae.arachne.CameraController;
@@ -30,6 +31,8 @@ public class WeaveEntityRenderer extends EntityRenderer<WeaveEntity> {
         // main rendering done in WeaveRenderer
 
         if(shouldShowIcon()) {
+            Profiler profiler = MinecraftClient.getInstance().getProfiler();
+            profiler.push("arachne_debug_icon");
             VertexConsumer vc = vertexConsumers.getBuffer(RenderLayer.getCutout());
 
             Function<Identifier, Sprite> ATLAS = MinecraftClient.getInstance().getSpriteAtlas(PlayerScreenHandler.BLOCK_ATLAS_TEXTURE);
@@ -57,14 +60,11 @@ public class WeaveEntityRenderer extends EntityRenderer<WeaveEntity> {
             Vec3d v2 = new Vec3d(-1, 0, 0);
             WeaveRenderer.drawLine(lines, matrices, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z, 255, 127, 127, 255);
             matrices.pop();
+            profiler.pop();
         }
     }
 
     public boolean shouldShowIcon() {
-        if(MinecraftClient.getInstance().options.debugEnabled) {
-            return true;
-        }
-
         PlayerEntity p = MinecraftClient.getInstance().player;
         if(p != null) {
             if(p.isHolding(ModItems.WEAVE) || p.isHolding(ModItems.WEAVE_CONTROLLER)) {
@@ -79,7 +79,6 @@ public class WeaveEntityRenderer extends EntityRenderer<WeaveEntity> {
         return MissingSprite.getMissingSpriteId();
     }
 
-    // TODO: culling
     @Override
     public boolean shouldRender(WeaveEntity entity, Frustum frustum, double x, double y, double z) {
         return true;
