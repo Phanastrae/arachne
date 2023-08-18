@@ -9,6 +9,10 @@ import java.util.ArrayList;
 
 public class BuiltRenderLayer {
 
+    public Object vertexBufferHolder = null;
+
+    int vertexCount;
+    int indexCount;
     public ArrayList<BuiltFace> faces = new ArrayList<>();
     public ArrayList<Byte> rs = new ArrayList<>();
     public ArrayList<Byte> gs = new ArrayList<>();
@@ -42,6 +46,31 @@ public class BuiltRenderLayer {
         this.namespace = renderMaterial.getNamespace();
         this.path = renderMaterial.getPath();
         this.useTextureAtlas = renderMaterial.getUseTextureAtlas();
+        this.vertexCount = 0;
+    }
+
+    int calcVertexCount(BuiltFace face) {
+        int c = 0;
+        int nCount = face.nodes.length;
+        int faceVertexCount = nCount + 1;
+        if(face.doubleSided) {
+            c += 2 * faceVertexCount;
+        } else {
+            c += faceVertexCount;
+        }
+        return c;
+    }
+
+    int calcIndexCount(BuiltFace face) {
+        int c = 0;
+        int nCount = face.nodes.length;
+        int faceVertexCount = nCount * 3;
+        if(face.doubleSided) {
+            c += 2 * faceVertexCount;
+        } else {
+            c += faceVertexCount;
+        }
+        return c;
     }
 
     public void accept(SketchFace sf, BuiltFace bf, int layer) {
@@ -58,6 +87,8 @@ public class BuiltRenderLayer {
         this.vAvg.add(avg(sf.v[layer]));
         this.uAvgClean.add(avg(sf.u[layer]));
         this.vAvgClean.add(avg(sf.v[layer]));
+        this.vertexCount += this.calcVertexCount(bf);
+        this.indexCount += this.calcIndexCount(bf);
     }
 
     public float avg(float[] floats) {
@@ -107,5 +138,13 @@ public class BuiltRenderLayer {
 
     public boolean getUseTextureAtlas() {
         return this.useTextureAtlas;
+    }
+
+    public int getVertexCount() {
+        return this.vertexCount;
+    }
+
+    public int getIndexCount() {
+        return this.indexCount;
     }
 }

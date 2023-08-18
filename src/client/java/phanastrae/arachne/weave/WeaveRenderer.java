@@ -1,10 +1,14 @@
 package phanastrae.arachne.weave;
 
+import com.mojang.blaze3d.platform.GlConst;
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gl.VertexBuffer;
 import net.minecraft.client.render.*;
 import net.minecraft.client.texture.MissingSprite;
 import net.minecraft.client.texture.Sprite;
+import net.minecraft.client.util.GlAllocationUtils;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.Entity;
 import net.minecraft.item.Item;
@@ -16,14 +20,14 @@ import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 import org.joml.*;
 import org.joml.Math;
+import org.lwjgl.system.MemoryUtil;
 import phanastrae.arachne.Arachne;
 import phanastrae.arachne.ArachneClient;
 import phanastrae.arachne.CameraController;
-import phanastrae.arachne.render.ModRenderLayers;
+import phanastrae.arachne.mixin.client.VertexBufferAccessor;
+import phanastrae.arachne.render.*;
 import phanastrae.arachne.old.PhysicsSystem;
 import phanastrae.arachne.old.EditorMainScreen;
-import phanastrae.arachne.render.PosColorBufferBuilder;
-import phanastrae.arachne.render.SolidBufferBuilder;
 import phanastrae.arachne.util.ArachneMath;
 import phanastrae.arachne.weave.element.built.BuiltFace;
 import phanastrae.arachne.weave.element.built.BuiltRenderLayer;
@@ -38,6 +42,8 @@ import phanastrae.arachne.old.tools.FaceCreationTool;
 import phanastrae.arachne.old.tools.SelectTool;
 import phanastrae.arachne.util.TimerHolder;
 
+import java.lang.management.MemoryUsage;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -169,6 +175,7 @@ public class WeaveRenderer {
     }
 
     public static void renderSketch(SketchWeave sketch, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, int overlay) {
+        MinecraftClient.getInstance().getProfiler().push("arachne_editor_sketch");
         VertexConsumerProvider.Immediate vcpi = ModRenderLayers.getBuffers();
         setupNodeWorldPos(sketch);
         renderNodes(sketch.nodes, matrices, vcpi);
@@ -176,19 +183,137 @@ public class WeaveRenderer {
         renderFaces(sketch.faces, matrices, vcpi);
         //renderTransforms(sketch.getRigidBodies(), matrices, vcpi);
         vcpi.draw();
+        MinecraftClient.getInstance().getProfiler().pop();
     }
 
     public static void renderInstance(WeaveInstance instance, float tickDelta, MatrixStack matrixStack, VertexConsumerProvider vertexConsumers, int light, int overlay) {
+        MinecraftClient.getInstance().getProfiler().push("arachne_weave");
         instance.doLerp(tickDelta);
+
+        MatrixStack modelViewStack = RenderSystem.getModelViewStack();
+        modelViewStack.push();
+        modelViewStack.multiplyPositionMatrix(matrixStack.peek().getPositionMatrix());
+        RenderSystem.applyModelViewMatrix();
 
         BuiltRenderLayer[] renderLayers = instance.builtWeave.renderLayers;
         for(BuiltRenderLayer rl : renderLayers) {
-            renderLayer(rl, instance, tickDelta, matrixStack, vertexConsumers, light, overlay);
+            renderLayer(rl, instance, tickDelta, vertexConsumers, light, overlay);
         }
         ModRenderLayers.getBuffers().draw();
+
+        modelViewStack.pop();
+        RenderSystem.applyModelViewMatrix();
+
+        MinecraftClient.getInstance().getProfiler().pop();
     }
 
-    public static void renderLayer(BuiltRenderLayer layer, WeaveInstance instance, float tickDelta, MatrixStack matrixStack, VertexConsumerProvider vertexConsumers, int light, int overlay) {
+    public static void renderLayer(BuiltRenderLayer layer, WeaveInstance instance, float tickDelta, VertexConsumerProvider vertexConsumers, int light, int overlay) {
+        // setup or get vertex buffer
+        VertexBufferHolder vbh;
+        VertexBuffer vertexBuffer;
+        if(!(layer.vertexBufferHolder instanceof VertexBufferHolder verb) || verb.getBuffer().isClosed()) {
+            vertexBuffer = new VertexBuffer(VertexBuffer.Usage.DYNAMIC);
+            vbh = new VertexBufferHolder(vertexBuffer);
+            BufferHolders.storeBufferHolder(vbh);
+            layer.vertexBufferHolder = vbh;
+
+            // gen default buffers
+            int vertexCount = layer.getVertexCount();
+            int indexCount = layer.getIndexCount();
+
+            // setup index buffer
+            ByteBuffer vb = GlAllocationUtils.allocateByteBuffer(vertexCount * 32);
+            ByteBuffer indexBuffer = GlAllocationUtils.allocateByteBuffer(indexCount * 4);
+            int index = 0;
+            int vertex = 0;
+            for(BuiltFace face : layer.faces) {
+                int k = face.nodes.length;
+                for(int i = 0; i < k; i++) {
+                    int j = (i + 1)%k;
+                    indexBuffer.putInt(index * 4, vertex + i);
+                    indexBuffer.putInt((index+1) * 4, vertex + j);
+                    indexBuffer.putInt((index+2) * 4, vertex + k);
+                    index += 3;
+                }
+                vertex += (k+1);
+                if(face.doubleSided) {
+                    for(int i = 0; i < k; i++) {
+                        int j = (i + 1)%k;
+                        indexBuffer.putInt(index * 4, vertex + j);
+                        indexBuffer.putInt((index+1) * 4, vertex + i);
+                        indexBuffer.putInt((index+2) * 4, vertex + k);
+                        index += 3;
+                    }
+                    vertex += (k+1);
+                }
+            }
+
+            // upload default buffers
+            vertexBuffer.bind();
+            BufferBuilder.DrawParameters params = new BufferBuilder.DrawParameters(VertexFormats.POSITION_COLOR_TEXTURE_LIGHT_NORMAL, vertexCount, indexCount, VertexFormat.DrawMode.TRIANGLES, VertexFormat.IndexType.INT, false, false);
+            ((VertexBufferAccess)vertexBuffer).upload(params, vb, indexBuffer);
+            VertexBuffer.unbind();
+
+            // free buffers
+            MemoryUtil.memFree(vb);
+            MemoryUtil.memFree(indexBuffer);
+        } else {
+            vbh = (VertexBufferHolder) layer.vertexBufferHolder;
+            vertexBuffer = vbh.getBuffer();
+        }
+
+        // input dynamic data
+        ByteBuffer vb = null;
+        ByteBufferHolder bbh = null;
+        boolean needsGen = true;
+        if(instance.layerToBufferHolderMap.containsKey(layer)) {
+            Object o = instance.layerToBufferHolderMap.get(layer);
+            if(o instanceof ByteBufferHolder) {
+                bbh = (ByteBufferHolder)o;
+                if(bbh.isReleased()) {
+                    instance.layerToBufferHolderMap.remove(layer);
+                } else {
+                    needsGen = false;
+                    vb = bbh.getBuffer();
+                }
+            } else {
+                instance.layerToBufferHolderMap.remove(layer);
+            }
+        }
+        if(needsGen) {
+            vb = GlAllocationUtils.allocateByteBuffer(layer.getVertexCount() * 32);
+            setupLayer(layer);
+            initBuffer(vb, layer, instance);
+            bbh = new ByteBufferHolder(vb);
+            bbh.setLastReload(ArachneClient.latestReload);
+            BufferHolders.storeBufferHolder(bbh);
+            instance.layerToBufferHolderMap.put(layer, bbh);
+        }
+
+        long latestReload = ArachneClient.latestReload;
+        if(bbh.needsReload(latestReload)) {
+            // setup uvs in case of resource pack reload
+            setupLayer(layer);
+            initBuffer(vb, layer, instance);
+            bbh.setLastReload(latestReload);
+        }
+
+        updateBuffer(vb, layer, instance, light);
+        GlStateManager._glBindBuffer(GlConst.GL_ARRAY_BUFFER, ((VertexBufferAccessor)vertexBuffer).getVertexBufferId());
+        RenderSystem.glBufferData(GlConst.GL_ARRAY_BUFFER, vb, GlConst.GL_DYNAMIC_DRAW);
+
+        // render
+        RenderLayer renderLayer = getRenderLayer(layer);
+        vertexBuffer.bind();
+
+        renderLayer.startDrawing();
+        vertexBuffer.draw(RenderSystem.getModelViewMatrix(), RenderSystem.getProjectionMatrix(), RenderSystem.getShader());
+        renderLayer.endDrawing();
+
+        VertexBuffer.unbind();
+    }
+
+    public static void setupLayer(BuiltRenderLayer layer) {
         Identifier id = layer.getIdentifier();
         boolean useAtlas = layer.getUseTextureAtlas();
         long latestReload = ArachneClient.latestReload;
@@ -201,8 +326,190 @@ public class WeaveRenderer {
                 }
             }
         }
+    }
 
-        VertexConsumer vc = ModRenderLayers.getBuffers().getBuffer(useAtlas ? ModRenderLayers.getSolid() : ModRenderLayers.SOLID_TEXTURE.apply(id, true));
+    public static RenderLayer getRenderLayer(BuiltRenderLayer layer) {
+        Identifier id = layer.getIdentifier();
+        boolean useAtlas = layer.getUseTextureAtlas();
+        return useAtlas ? ModRenderLayers.getSolid() : ModRenderLayers.SOLID_TEXTURE.apply(id, true);
+    }
+
+    public static void updateBuffer(ByteBuffer vertexBuffer, BuiltRenderLayer layer, WeaveInstance instance, int light) {
+        WeaveStateUpdater stateUpdater = instance.lerpWeaveStateUpdater;
+
+        ArrayList<BuiltFace> faces = layer.faces;
+        ArrayList<Byte> rs = layer.rs;
+        ArrayList<Byte> gs = layer.gs;
+        ArrayList<Byte> bs = layer.bs;
+        ArrayList<Byte> as = layer.as;
+
+        Direction[] directions = new Direction[]{Direction.EAST, Direction.WEST, Direction.UP, Direction.DOWN, Direction.SOUTH, Direction.NORTH};
+        float[] directionColors = new float[]{1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+        World world = MinecraftClient.getInstance().world;
+        if(world != null) {
+            for (int i = 0; i < 6; i++) {
+                directionColors[i] = world.getBrightness(directions[i], true);
+            }
+        }
+
+        int vertexOffset = 0;
+        float[] p = new float[3];
+        float[] p3 = new float[3];
+        float[] normal = new float[3];
+        byte[] common1 = new byte[4];
+        byte[] common2 = new byte[7];
+        for(int i = 0; i < faces.size(); i++) {
+            BuiltFace face = faces.get(i);
+            byte r = rs.get(i);
+            byte g = gs.get(i);
+            byte b = bs.get(i);
+            byte a = as.get(i);
+
+            face.getCenterPos(stateUpdater, p3);
+            face.getNormal(stateUpdater, normal, p3);
+            float nx = normal[0];
+            float ny = normal[1];
+            float nz = normal[2];
+            int inx = (int)(nx*127.0f);
+            int iny = (int)(ny*127.0f);
+            int inz = (int)(nz*127.0f);
+            int l = face.nodes.length;
+
+            short l1 = (short)(light & (LightmapTextureManager.MAX_BLOCK_LIGHT_COORDINATE | 0xFF0F));
+            short l2 = (short)(light >> 16 & (LightmapTextureManager.MAX_BLOCK_LIGHT_COORDINATE | 0xFF0F));
+
+            float lmul = nx*nx*(nx > 0 ? directionColors[0] : directionColors[1])
+                    + ny*ny*(ny > 0 ? directionColors[2] : directionColors[3])
+                    + nz*nz*(nz > 0 ? directionColors[4] : directionColors[5]);
+            if(nx*nx+ny*ny+nz*nz == 0) { // if overall face normal is 0, set light to 1
+                lmul = 1.0f;
+            }
+            byte rl = (byte)((r&0xff) * lmul);
+            byte gl = (byte)((g&0xff) * lmul);
+            byte bl = (byte)((b&0xff) * lmul);
+
+            byte bnx = (byte)(inx&0xff);
+            byte bny = (byte)(iny&0xff);
+            byte bnz = (byte)(inz&0xff);
+
+            common1[0] = rl;
+            common1[1] = gl;
+            common1[2] = bl;
+            common1[3] = a;
+
+            common2[0] = (byte)(l1&0xff);
+            common2[1] = (byte)((l1&0xff00)>>8);
+            common2[2] = (byte)(l2&0xff);
+            common2[3] = (byte)((l2&0xff00)>>8);
+            common2[4] = bnx;
+            common2[5] = bny;
+            common2[6] = bnz;
+
+            for(int j = 0; j < l; j++) {
+                face.getNodeInput(j, stateUpdater).getPosition(p);
+                updateVertex(vertexBuffer, vertexOffset, p[0], p[1], p[2], common1, common2);
+                vertexOffset++;
+            }
+            updateVertex(vertexBuffer, vertexOffset, p3[0], p3[1], p3[2], common1, common2);
+            vertexOffset++;
+
+            if(face.doubleSided) {
+                lmul = nx*nx*(nx < 0 ? directionColors[0] : directionColors[1])
+                        + ny*ny*(ny < 0 ? directionColors[2] : directionColors[3])
+                        + nz*nz*(nz < 0 ? directionColors[4] : directionColors[5]);
+                if(nx*nx+ny*ny+nz*nz == 0) { // if overall face normal is 0, set light to 1
+                    lmul = 1.0f;
+                }
+                rl = (byte)((r&0xff) * lmul);
+                gl = (byte)((g&0xff) * lmul);
+                bl = (byte)((b&0xff) * lmul);
+
+                bnx = (byte)(-(inx)&0xff);
+                bny = (byte)(-(iny)&0xff);
+                bnz = (byte)(-(inz)&0xff);
+
+
+                common1[0] = rl;
+                common1[1] = gl;
+                common1[2] = bl;
+
+                common2[4] = bnx;
+                common2[5] = bny;
+                common2[6] = bnz;
+
+                for (int j = 0; j < l; j++) {
+                    face.getNodeInput(j, stateUpdater).getPosition(p);
+                    updateVertex(vertexBuffer, vertexOffset, p[0], p[1], p[2], common1, common2);
+                    vertexOffset++;
+                }
+                updateVertex(vertexBuffer, vertexOffset, p3[0], p3[1], p3[2], common1, common2);
+                vertexOffset++;
+            }
+        }
+    }
+
+    public static void updateVertex(ByteBuffer vertexBuffer, int vertexOffset, float x, float y, float z, byte[] common1, byte[] common2) {
+        int offset = vertexOffset * 32;
+        vertexBuffer.putFloat(offset, x);
+        vertexBuffer.putFloat(offset+4, y);
+        vertexBuffer.putFloat(offset+8, z);
+        vertexBuffer.put(offset+12, common1);
+        //vertexBuffer.put(offset+12, r);
+        //vertexBuffer.put(offset+13, g);
+        //vertexBuffer.put(offset+14, b);
+        //vertexBuffer.put(offset+15, a);
+        // skip uvs, update not needed
+        vertexBuffer.put(offset+24, common2);
+        //vertexBuffer.putShort(offset+24, l1);
+        //vertexBuffer.putShort(offset+26, l2);
+        //vertexBuffer.put(offset+28, nx);
+        //vertexBuffer.put(offset+29, ny);
+        //vertexBuffer.put(offset+30, nz);
+        // final byte is always empty
+    }
+
+    public static void initBuffer(ByteBuffer vertexBuffer, BuiltRenderLayer layer, WeaveInstance instance) {
+        ArrayList<BuiltFace> faces = layer.faces;
+        ArrayList<float[]> us = layer.usClean;
+        ArrayList<float[]> vs = layer.vsClean;
+        ArrayList<Float> uAvgs = layer.uAvgClean;
+        ArrayList<Float> vAvgs = layer.vAvgClean;
+
+        int vertexOffset = 0;
+        for(int i = 0; i < faces.size(); i++) {
+            BuiltFace face = faces.get(i);
+            float[] u = us.get(i);
+            float[] v = vs.get(i);
+            float uAvg = uAvgs.get(i);
+            float vAvg = vAvgs.get(i);
+            int l = face.nodes.length;
+
+            for(int j = 0; j < l; j++) {
+                initVertex(vertexBuffer, vertexOffset, u[j], v[j]);
+                vertexOffset++;
+            }
+            initVertex(vertexBuffer, vertexOffset, uAvg, vAvg);
+            vertexOffset++;
+
+            if(face.doubleSided) {
+                for(int j = 0; j < l; j++) {
+                    initVertex(vertexBuffer, vertexOffset, u[j], v[j]);
+                    vertexOffset++;
+                }
+                initVertex(vertexBuffer, vertexOffset, uAvg, vAvg);
+                vertexOffset++;
+            }
+        }
+    }
+
+    public static void initVertex(ByteBuffer vertexBuffer, int vertexOffset, float u, float v) {
+        int offset = vertexOffset * 32;
+        vertexBuffer.put(offset, new byte[32]);
+        vertexBuffer.putFloat(offset+16, u);
+        vertexBuffer.putFloat(offset+20, v);
+    }
+
+    public static void renderLayer(BuiltRenderLayer layer, WeaveInstance instance, VertexConsumer vc, int light) {
         WeaveStateUpdater stateUpdater = instance.lerpWeaveStateUpdater;
 
         ArrayList<BuiltFace> faces = layer.faces;
@@ -214,8 +521,6 @@ public class WeaveRenderer {
         ArrayList<float[]> vs = layer.vsClean;
         ArrayList<Float> uAvgs = layer.uAvgClean;
         ArrayList<Float> vAvgs = layer.vAvgClean;
-
-        Matrix4f mat = matrixStack.peek().getPositionMatrix();
 
         Direction[] directions = new Direction[]{Direction.EAST, Direction.WEST, Direction.UP, Direction.DOWN, Direction.SOUTH, Direction.NORTH};
         float[] directionColors = new float[]{1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
@@ -250,23 +555,23 @@ public class WeaveRenderer {
                 Vec3d p1 = face.getNodeInput(j, stateUpdater).getPosition();
                 Vec3d p2 = face.getNodeInput(k, stateUpdater).getPosition();
                 if(SBB) {
-                    drawTriangle(sbb, mat, p1, p2, p3, r, g, b, a, uvs, (float)faceNormal.x, (float)faceNormal.y, (float)faceNormal.z, directionColors, light);
+                    drawTriangle(sbb, p1, p2, p3, r, g, b, a, uvs, (float)faceNormal.x, (float)faceNormal.y, (float)faceNormal.z, directionColors, light);
                     if (face.doubleSided) {
                         uvs = new float[]{u[k], v[k], u[j], v[j], uAvg, vAvg};
-                        drawTriangle(sbb, mat, p2, p1, p3, r, g, b, a, uvs, -(float)faceNormal.x, -(float)faceNormal.y, -(float)faceNormal.z, directionColors, light);
+                        drawTriangle(sbb, p2, p1, p3, r, g, b, a, uvs, -(float)faceNormal.x, -(float)faceNormal.y, -(float)faceNormal.z, directionColors, light);
                     }
                 } else {
-                    drawTriangle(vc, mat, p1, p2, p3, r, g, b, a, uvs, (float)faceNormal.x, (float)faceNormal.y, (float)faceNormal.z, directionColors, light);
+                    drawTriangle(vc, p1, p2, p3, r, g, b, a, uvs, (float)faceNormal.x, (float)faceNormal.y, (float)faceNormal.z, directionColors, light);
                     if (face.doubleSided) {
                         uvs = new float[]{u[k], v[k], u[j], v[j], uAvg, vAvg};
-                        drawTriangle(vc, mat, p2, p1, p3, r, g, b, a, uvs, -(float)faceNormal.x, -(float)faceNormal.y, -(float)faceNormal.z, directionColors, light);
+                        drawTriangle(vc, p2, p1, p3, r, g, b, a, uvs, -(float)faceNormal.x, -(float)faceNormal.y, -(float)faceNormal.z, directionColors, light);
                     }
                 }
             }
         }
     }
 
-    public static void drawTriangle(VertexConsumer vc, Matrix4f mat, Vec3d p1, Vec3d p2, Vec3d p3, byte r, byte g, byte b, byte a, float[] uvs, float nx, float ny, float nz, float[] directionColors, int light) {
+    public static void drawTriangle(VertexConsumer vc, Vec3d p1, Vec3d p2, Vec3d p3, byte r, byte g, byte b, byte a, float[] uvs, float nx, float ny, float nz, float[] directionColors, int light) {
         float l = nx*nx*(nx > 0 ? directionColors[0] : directionColors[1])
                 + ny*ny*(ny > 0 ? directionColors[2] : directionColors[3])
                 + nz*nz*(nz > 0 ? directionColors[4] : directionColors[5]);
@@ -279,16 +584,16 @@ public class WeaveRenderer {
         float bf = ((b&0xff) * l)/255f;
         float af = a/255f;
 
-        Vector4f v1 = mat.transform(new Vector4f((float)p1.x, (float)p1.y, (float)p1.z, 1));
-        Vector4f v2 = mat.transform(new Vector4f((float)p2.x, (float)p2.y, (float)p2.z, 1));
-        Vector4f v3 = mat.transform(new Vector4f((float)p3.x, (float)p3.y, (float)p3.z, 1));
+        //Vector4f v1 = mat.transform(new Vector4f((float)p1.x, (float)p1.y, (float)p1.z, 1));
+        //Vector4f v2 = mat.transform(new Vector4f((float)p2.x, (float)p2.y, (float)p2.z, 1));
+        //Vector4f v3 = mat.transform(new Vector4f((float)p3.x, (float)p3.y, (float)p3.z, 1));
 
-        vc.vertex(v1.x, v1.y, v1.z, rf, gf, bf, af, uvs[0], uvs[1], 0, light, nx, ny, nz);
-        vc.vertex(v2.x, v2.y, v2.z, rf, gf, bf, af, uvs[2], uvs[3], 0, light, nx, ny, nz);
-        vc.vertex(v3.x, v3.y, v3.z, rf, gf, bf, af, uvs[4], uvs[5], 0, light, nx, ny, nz);
+        vc.vertex((float)p1.x, (float)p1.y, (float)p1.z, rf, gf, bf, af, uvs[0], uvs[1], 0, light, nx, ny, nz);
+        vc.vertex((float)p2.x, (float)p2.y, (float)p2.z, rf, gf, bf, af, uvs[2], uvs[3], 0, light, nx, ny, nz);
+        vc.vertex((float)p3.x, (float)p3.y, (float)p3.z, rf, gf, bf, af, uvs[4], uvs[5], 0, light, nx, ny, nz);
     }
 
-    public static void drawTriangle(SolidBufferBuilder vc, Matrix4f mat, Vec3d p1, Vec3d p2, Vec3d p3, byte r, byte g, byte b, byte a, float[] uvs, float nx, float ny, float nz, float[] directionColors, int light) {
+    public static void drawTriangle(SolidBufferBuilder vc, Vec3d p1, Vec3d p2, Vec3d p3, byte r, byte g, byte b, byte a, float[] uvs, float nx, float ny, float nz, float[] directionColors, int light) {
         float l = nx*nx*(nx > 0 ? directionColors[0] : directionColors[1])
             + ny*ny*(ny > 0 ? directionColors[2] : directionColors[3])
             + nz*nz*(nz > 0 ? directionColors[4] : directionColors[5]);
@@ -301,11 +606,11 @@ public class WeaveRenderer {
         byte bb = (byte)((b&0xff)*l);
         byte ab = (byte)(a);
 
-        Vector4f v1 = mat.transform(new Vector4f((float)p1.x, (float)p1.y, (float)p1.z, 1));
-        Vector4f v2 = mat.transform(new Vector4f((float)p2.x, (float)p2.y, (float)p2.z, 1));
-        Vector4f v3 = mat.transform(new Vector4f((float)p3.x, (float)p3.y, (float)p3.z, 1));
+        //Vector4f v1 = mat.transform(new Vector4f((float)p1.x, (float)p1.y, (float)p1.z, 1));
+        //Vector4f v2 = mat.transform(new Vector4f((float)p2.x, (float)p2.y, (float)p2.z, 1));
+        //Vector4f v3 = mat.transform(new Vector4f((float)p3.x, (float)p3.y, (float)p3.z, 1));
 
-        vc.accept(v1, v2, v3, rb, gb, bb, ab, uvs, light, nx, ny, nz);
+        vc.accept(p1, p2, p3, rb, gb, bb, ab, uvs, light, nx, ny, nz);
     }
 
     public static void renderCrosshair(MatrixStack matrices, VertexConsumer vcLines) {

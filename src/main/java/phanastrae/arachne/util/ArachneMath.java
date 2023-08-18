@@ -15,4 +15,21 @@ public class ArachneMath {
         Vec3d l2 = p1.subtract(p3);
         return l1.crossProduct(l2).normalize();
     }
+
+    public static void getNormal(float[] p1, float[] p2, float[] p3, float[] fill) {
+        double l1x = p1[0]-p2[0];
+        double l1y = p1[1]-p2[1];
+        double l1z = p1[2]-p2[2];
+        double l2x = p1[0]-p3[0];
+        double l2y = p1[1]-p3[1];
+        double l2z = p1[2]-p3[2];
+        double crossx = l1y*l2z-l1z*l2y;
+        double crossy = l1z*l2x-l1x*l2z;
+        double crossz = l1x*l2y-l1y*l2x;
+        double len = crossx*crossx+crossy*crossy+crossz*crossz;
+        double normFactor = 1/Math.sqrt(len);
+        fill[0] = (float)(crossx * normFactor);
+        fill[1] = (float)(crossy * normFactor);
+        fill[2] = (float)(crossz * normFactor);
+    }
 }

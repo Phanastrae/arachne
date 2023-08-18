@@ -181,6 +181,24 @@ public class BuiltFace implements ForceAdder {
         return new Vec3d(avgx, avgy, avgz);
     }
 
+    public void getCenterPos(WeaveStateUpdater weaveStateUpdater, float[] fill) {
+        double avgx = 0;
+        double avgy = 0;
+        double avgz = 0;
+        for (int i : this.nodes) {
+            ActiveNode node = weaveStateUpdater.getNodeInput(i);
+            avgx += node.x;
+            avgy += node.y;
+            avgz += node.z;
+        }
+        avgx *= oneByNodeCount;
+        avgy *= oneByNodeCount;
+        avgz *= oneByNodeCount;
+        fill[0] = (float)avgx;
+        fill[1] = (float)avgy;
+        fill[2] = (float)avgz;
+    }
+
     public Vec3d getNormal(WeaveStateUpdater weaveStateUpdater) {
         int l = this.nodes.length;
         if(l < 3) return Vec3d.ZERO;
@@ -194,5 +212,34 @@ public class BuiltFace implements ForceAdder {
             total = total.add(ArachneMath.getNormal(p1, p2, p3));
         }
         return total.normalize();
+    }
+
+    public void getNormal(WeaveStateUpdater weaveStateUpdater, float[] fill, float[] center) {
+        int l = this.nodes.length;
+        if(l < 3) {
+            fill[0] = 0;
+            fill[1] = 0;
+            fill[2] = 0;
+        }
+
+        float totx = 0;
+        float toty = 0;
+        float totz = 0;
+        float[] p1 = new float[3];
+        float[] p2 = new float[3];
+        float[] addition = new float[3];
+        for(int i = 0; i < l; i++) {
+            int j = (i + 1)%l;
+            getNodeInput(i, weaveStateUpdater).getPosition(p1);
+            getNodeInput(j, weaveStateUpdater).getPosition(p2);
+            ArachneMath.getNormal(p1, p2, center, addition);
+            totx += addition[0];
+            toty += addition[1];
+            totz += addition[2];
+        }
+        double norm = 1/Math.sqrt(totx*totx+toty*toty+totz*totz);
+        fill[0] = (float)(totx*norm);
+        fill[1] = (float)(toty*norm);
+        fill[2] = (float)(totz*norm);
     }
 }

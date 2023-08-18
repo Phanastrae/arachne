@@ -114,6 +114,12 @@ public class ActiveNode implements ForceAcceptor {
         return new Vec3d(this.x, this.y, this.z);
     }
 
+    public void getPosition(float[] fill) {
+        fill[0] = (float)this.x;
+        fill[1] = (float)this.y;
+        fill[2] = (float)this.z;
+    }
+
     public void lerpPositions(ActiveNode from, ActiveNode to, float lerp) {
         float prel = 1 - lerp;
         this.x = from.x * prel + to.x * lerp;

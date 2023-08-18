@@ -3,12 +3,18 @@ package phanastrae.arachne.weave;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import phanastrae.arachne.Arachne;
+import phanastrae.arachne.weave.element.built.BuiltRenderLayer;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class WeaveInstance {
 
     BuiltWeave builtWeave;
     WeaveStateUpdater weaveStateUpdater;
     WeaveStateUpdater lerpWeaveStateUpdater;
+
+    public Map<BuiltRenderLayer, Object> layerToBufferHolderMap = new HashMap<>();
 
     // the externally input parts of the state i.e. entity position, other entities' positions
     WeaveState worldState;

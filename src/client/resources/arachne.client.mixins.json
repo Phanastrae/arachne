@@ -14,7 +14,10 @@
     "InGameHudMixin",
     "ItemGroupsAccessor",
     "MinecraftClientMixin",
-    "ScreenAccessor"
+    "ScreenAccessor",
+    "VertexBufferAccessor",
+    "VertexBufferMixin",
+    "WorldRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

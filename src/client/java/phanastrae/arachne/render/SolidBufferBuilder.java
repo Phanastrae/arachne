@@ -3,6 +3,7 @@ package phanastrae.arachne.render;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.BufferVertexConsumer;
 import net.minecraft.client.render.LightmapTextureManager;
+import net.minecraft.util.math.Vec3d;
 import org.joml.Vector4f;
 import phanastrae.arachne.mixin.client.BufferBuilderAccessor;
 
@@ -15,7 +16,7 @@ public class SolidBufferBuilder extends BufferBuilder {
         super(initialCapacity);
     }
 
-    public void accept(Vector4f v1, Vector4f v2, Vector4f v3, byte r, byte g, byte b, byte a, float[] uvs, int light, float nx, float ny, float nz){
+    public void accept(Vec3d v1, Vec3d v2, Vec3d v3, byte r, byte g, byte b, byte a, float[] uvs, int light, float nx, float ny, float nz){
         if(bba.getElementOffset() + 128 > bba.getBuffer().capacity()) {
             bba2.doGrow(128);
         }
@@ -25,9 +26,9 @@ public class SolidBufferBuilder extends BufferBuilder {
         byte bnx = BufferVertexConsumer.packByte(nx);
         byte bny = BufferVertexConsumer.packByte(ny);
         byte bnz = BufferVertexConsumer.packByte(nz);
-        putVertex(v1.x, v1.y, v1.z, r, g, b, a, uvs[0], uvs[1], l1, l2, bnx, bny, bnz);
-        putVertex(v2.x, v2.y, v2.z, r, g, b, a, uvs[2], uvs[3], l1, l2, bnx, bny, bnz);
-        putVertex(v3.x, v3.y, v3.z, r, g, b, a, uvs[4], uvs[5], l1, l2, bnx, bny, bnz);
+        putVertex((float)v1.x, (float)v1.y, (float)v1.z, r, g, b, a, uvs[0], uvs[1], l1, l2, bnx, bny, bnz);
+        putVertex((float)v2.x, (float)v2.y, (float)v2.z, r, g, b, a, uvs[2], uvs[3], l1, l2, bnx, bny, bnz);
+        putVertex((float)v3.x, (float)v3.y, (float)v3.z, r, g, b, a, uvs[4], uvs[5], l1, l2, bnx, bny, bnz);
     }
 
     public void putVertex(float x, float y, float z, byte r, byte g, byte b, byte a, float u, float v, short l1, short l2, byte nx, byte ny, byte nz) {
