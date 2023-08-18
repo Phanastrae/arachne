@@ -7,8 +7,19 @@ import phanastrae.arachne.weave.element.built.BuiltRenderLayer;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class WeaveInstance {
+
+    boolean updating = false;
+    boolean updatingBuffer = false;
+    public boolean bufferReady = false;
+
+    final Object syncObject = new Object();
+    final Object syncObject2 = new Object();
+
+    Lock lock = new ReentrantLock();
 
     BuiltWeave builtWeave;
     WeaveStateUpdater weaveStateUpdater;
@@ -16,6 +27,7 @@ public class WeaveInstance {
 
     public Map<BuiltRenderLayer, Object> layerToBufferHolderMap = new HashMap<>();
 
+    // TODO actually separate into the 4 states, currently just using worldState for everything and treating it as soloState should be
     // the externally input parts of the state i.e. entity position, other entities' positions
     WeaveState worldState;
     WeaveState prevWorldState;
@@ -63,6 +75,14 @@ public class WeaveInstance {
         setupStateUpdateForRead();
     }
 
+    public void lock() {
+        this.lock.lock();
+    }
+
+    public void unlock() {
+        this.lock.unlock();
+    }
+
     public void preUpdate(World world) {
         swapStates();
 
@@ -72,9 +92,14 @@ public class WeaveInstance {
     }
 
     public void update() {
-        updateSyncStates();
-
-        updateSoloStates();
+        this.lock();
+        try {
+            updateSyncStates();
+            updateSoloStates();
+        } finally {
+            this.unlock();
+        }
+        this.setUpdating(false);
     }
 
     void updateSyncStates() {
@@ -132,5 +157,57 @@ public class WeaveInstance {
         double t = world.getTime() / 20f;
         this.wind = new Vec3d(- 5 + Math.sin(t / 16) * Math.sin(t / 7) * 3, Math.sin(t / 3.314) * 2, Math.cos(t / 16) * Math.sin(t / 7) * 8);
         this.wind = this.wind.rotateY((float)Math.toRadians(this.windRotation));
+    }
+    public void setUpdating() {
+        setUpdating(true);
+    }
+
+    public void setUpdating(boolean updating) {
+        synchronized (syncObject) {
+            this.updating = updating;
+            if(!updating) {
+                syncObject.notifyAll();
+            }
+        }
+    }
+
+    public void waitForUpdate() {
+        if(!this.updating) {
+            return;
+        }
+        try {
+            synchronized (syncObject) {
+                while(this.updating) {
+                    syncObject.wait();
+                }
+            }
+        } catch (InterruptedException ignored) {
+        }
+    }
+    public void setBufferUpdating() {
+        setBufferUpdating(true);
+    }
+
+    public void setBufferUpdating(boolean updatingBuffer) {
+        synchronized (syncObject2) {
+            this.updatingBuffer = updatingBuffer;
+            if(!updatingBuffer) {
+                syncObject2.notifyAll();
+            }
+        }
+    }
+
+    public void waitForBufferUpdate() {
+        if(!this.updatingBuffer) {
+            return;
+        }
+        try {
+            synchronized (syncObject2) {
+                while(this.updatingBuffer) {
+                    syncObject2.wait();
+                }
+            }
+        } catch (InterruptedException ignored) {
+        }
     }
 }

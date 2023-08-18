@@ -16,6 +16,7 @@ import net.minecraft.item.Items;
 import net.minecraft.screen.PlayerScreenHandler;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.*;
+import net.minecraft.util.profiler.Profiler;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 import org.joml.*;
@@ -52,8 +53,22 @@ import java.util.function.Function;
 
 public class WeaveRenderer {
 
+    public static void updateEntityWeaves(Entity entity, float tickDelta, MatrixStack matrices, int light) {
+        WeaveControl.forEachWeaveInEntity(entity, (string, weaveCache) -> updateEntityWeave(weaveCache.getWeave(), tickDelta, matrices, light));
+    }
+
+    public static void updateEntityWeave(@Nullable WeaveInstance weave, float tickDelta, MatrixStack matrices, int light) {
+        if(weave == null) return;
+        if(shouldCull(weave, matrices)) return;
+
+        WeaveRenderer.queueInstanceUpdate(weave, tickDelta, light);
+    }
+
     public static void renderEntityWeaves(Entity entity, float yaw, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light) {
+        Profiler profiler = MinecraftClient.getInstance().getProfiler();
+        profiler.push("arachne_entity_weaves");
         WeaveControl.forEachWeaveInEntity(entity, (string, weaveCache) -> renderEntityWeave(entity, weaveCache.getWeave(), yaw, tickDelta, matrices, vertexConsumers, light));
+        profiler.pop();
     }
 
     public static void renderEntityWeave(Entity entity, @Nullable WeaveInstance weave, float yaw, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light) {
@@ -61,7 +76,7 @@ public class WeaveRenderer {
 
         if(shouldCull(weave, matrices)) return;
 
-        // TODO make movement work nice again
+        // TODO reimplement nice weave movement
 
         matrices.push();
         matrices.translate(0, 0.5, 0);
@@ -186,10 +201,83 @@ public class WeaveRenderer {
         MinecraftClient.getInstance().getProfiler().pop();
     }
 
-    public static void renderInstance(WeaveInstance instance, float tickDelta, MatrixStack matrixStack, VertexConsumerProvider vertexConsumers, int light, int overlay) {
-        MinecraftClient.getInstance().getProfiler().push("arachne_weave");
-        instance.doLerp(tickDelta);
+    public static void queueInstanceUpdate(WeaveInstance instance, float tickDelta, int light) {
+        Profiler profiler = MinecraftClient.getInstance().getProfiler();
 
+        profiler.push("setup");
+        setupWeaveInstance(instance, tickDelta, light);
+        profiler.pop();
+
+        profiler.push("queueUpdate");
+        instance.setBufferUpdating();
+        instance.bufferReady = true;
+        ArachneClient.runnableQueueClient.queue(() -> {
+            instance.waitForUpdate();
+            updateWeaveInstance(instance, tickDelta, light);
+            instance.setBufferUpdating(false);
+        });
+        profiler.pop();
+    }
+
+    public static void renderInstance(WeaveInstance instance, float tickDelta, MatrixStack matrixStack, VertexConsumerProvider vertexConsumers, int light, int overlay) {
+        Profiler profiler = MinecraftClient.getInstance().getProfiler();
+        profiler.push("arachne_weave");
+
+        profiler.push("waitForPhysicsUpdate");
+        instance.waitForUpdate();
+
+        instance.lock();
+        try {
+            profiler.pop();
+
+            if(instance.bufferReady) {
+                profiler.push("waitForRenderUpdate");
+                instance.waitForBufferUpdate();
+                instance.bufferReady = false;
+                profiler.pop();
+            } else {
+                profiler.push("setup");
+                setupWeaveInstance(instance, tickDelta, light);
+                profiler.pop();
+
+                profiler.push("update");
+                instance.setBufferUpdating();
+                ArachneClient.runnableQueueClient.queue(() -> {
+                    updateWeaveInstance(instance, tickDelta, light);
+                    instance.setBufferUpdating(false);
+                });
+                profiler.pop();
+                profiler.push("waitForRenderUpdate");
+                instance.waitForBufferUpdate();
+                profiler.pop();
+            }
+
+            profiler.push("render");
+            renderWeaveInstance(instance, matrixStack);
+            profiler.pop();
+        } finally {
+            instance.unlock();
+        }
+
+        profiler.pop();
+    }
+
+    public static void setupWeaveInstance(WeaveInstance instance, float tickDelta, int light) {
+        BuiltRenderLayer[] renderLayers = instance.builtWeave.renderLayers;
+        for (BuiltRenderLayer rl : renderLayers) {
+            setupLayer(rl, instance);
+        }
+    }
+
+    public static void updateWeaveInstance(WeaveInstance instance, float tickDelta, int light) {
+        instance.doLerp(tickDelta);
+        BuiltRenderLayer[] renderLayers = instance.builtWeave.renderLayers;
+        for (BuiltRenderLayer rl : renderLayers) {
+            updateLayer(rl, instance, light);
+        }
+    }
+
+    public static void renderWeaveInstance(WeaveInstance instance, MatrixStack matrixStack) {
         MatrixStack modelViewStack = RenderSystem.getModelViewStack();
         modelViewStack.push();
         modelViewStack.multiplyPositionMatrix(matrixStack.peek().getPositionMatrix());
@@ -197,17 +285,13 @@ public class WeaveRenderer {
 
         BuiltRenderLayer[] renderLayers = instance.builtWeave.renderLayers;
         for(BuiltRenderLayer rl : renderLayers) {
-            renderLayer(rl, instance, tickDelta, vertexConsumers, light, overlay);
+            renderLayer(rl, instance);
         }
-        ModRenderLayers.getBuffers().draw();
-
         modelViewStack.pop();
         RenderSystem.applyModelViewMatrix();
-
-        MinecraftClient.getInstance().getProfiler().pop();
     }
 
-    public static void renderLayer(BuiltRenderLayer layer, WeaveInstance instance, float tickDelta, VertexConsumerProvider vertexConsumers, int light, int overlay) {
+    public static void setupLayer(BuiltRenderLayer layer, WeaveInstance instance) {
         // setup or get vertex buffer
         VertexBufferHolder vbh;
         VertexBuffer vertexBuffer;
@@ -289,6 +373,17 @@ public class WeaveRenderer {
             BufferHolders.storeBufferHolder(bbh);
             instance.layerToBufferHolderMap.put(layer, bbh);
         }
+    }
+
+    public static void updateLayer(BuiltRenderLayer layer, WeaveInstance instance, int light) {
+        ByteBufferHolder bbh;
+        ByteBuffer vb;
+        if(instance.layerToBufferHolderMap.get(layer) instanceof ByteBufferHolder bybh) {
+            bbh = bybh;
+            vb = bbh.getBuffer();
+        } else {
+            return;
+        }
 
         long latestReload = ArachneClient.latestReload;
         if(bbh.needsReload(latestReload)) {
@@ -299,6 +394,22 @@ public class WeaveRenderer {
         }
 
         updateBuffer(vb, layer, instance, light);
+    }
+
+    public static void renderLayer(BuiltRenderLayer layer, WeaveInstance instance) {
+        VertexBuffer vertexBuffer;
+        ByteBuffer vb;
+        if(layer.vertexBufferHolder instanceof VertexBufferHolder vbh) {
+            vertexBuffer = vbh.getBuffer();
+        } else {
+            return;
+        }
+        if(instance.layerToBufferHolderMap.get(layer) instanceof ByteBufferHolder bbh) {
+            vb = bbh.getBuffer();
+        } else {
+            return;
+        }
+
         GlStateManager._glBindBuffer(GlConst.GL_ARRAY_BUFFER, ((VertexBufferAccessor)vertexBuffer).getVertexBufferId());
         RenderSystem.glBufferData(GlConst.GL_ARRAY_BUFFER, vb, GlConst.GL_DYNAMIC_DRAW);
 

@@ -49,8 +49,12 @@ public class WeaveCache {
 
     public void update(World world) {
         if(this.WEAVE_LAST != null) {
+            this.WEAVE_LAST.waitForUpdate();
+            this.WEAVE_LAST.lock();
             this.WEAVE_LAST.preUpdate(world);
-            this.WEAVE_LAST.update();
+            this.WEAVE_LAST.setUpdating();
+            this.WEAVE_LAST.unlock();
+            Arachne.runnableQueue.queue(this.WEAVE_LAST::update);
         }
     }
 

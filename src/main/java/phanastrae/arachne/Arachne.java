@@ -13,8 +13,11 @@ import phanastrae.arachne.setup.ModEntities;
 import phanastrae.arachne.setup.ModScreenHandlerTypes;
 import phanastrae.arachne.setup.ModItems;
 import phanastrae.arachne.networking.SketchUpdateC2SPacket;
+import phanastrae.arachne.thread.RunnableQueue;
 
 public class Arachne implements ModInitializer {
+    public static RunnableQueue runnableQueue = new RunnableQueue(4);
+
     public static final Logger LOGGER = LoggerFactory.getLogger("Arachne");
 
     public static Identifier id (String str) {

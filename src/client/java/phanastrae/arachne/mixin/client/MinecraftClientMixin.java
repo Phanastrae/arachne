@@ -7,6 +7,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import phanastrae.arachne.Arachne;
+import phanastrae.arachne.ArachneClient;
 import phanastrae.arachne.render.BufferHolders;
 import phanastrae.arachne.screen.ArachneTabResources;
 
@@ -19,14 +21,11 @@ public class MinecraftClientMixin {
         ArachneTabResources.needsReload = true;
     }
 
-    @Inject(method = "run", at = @At("RETURN"))
+    @Inject(method = "stop", at = @At("HEAD"))
     public void arachne_cleanupOnClose(CallbackInfo ci) {
         BufferHolders.releaseAll();
-    }
-
-    @Inject(method = "cleanUpAfterCrash", at = @At("HEAD"))
-    public void arachne_cleanupAfterCrash(CallbackInfo ci) {
-        BufferHolders.releaseAll();
+        ArachneClient.runnableQueueClient.close();
+        Arachne.runnableQueue.close();
     }
 
     @Inject(method = "render", at = @At("HEAD"))

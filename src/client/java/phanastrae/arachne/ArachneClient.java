@@ -38,6 +38,7 @@ import phanastrae.arachne.item.SketchTooltipData;
 import phanastrae.arachne.setup.ModScreenHandlerTypes;
 import phanastrae.arachne.screen.editor.EditorIntroScreen;
 import phanastrae.arachne.screen.editor.EditorMainScreen;
+import phanastrae.arachne.thread.RunnableQueue;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -48,6 +49,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 public class ArachneClient implements ClientModInitializer {
+
+    public static RunnableQueue runnableQueueClient = new RunnableQueue(4);
+
     @Override
     public void onInitializeClient() {
         SketchingTableBlockEntity.TICK_EVENT = EditorMainScreen::tickFromBlockEntity;
