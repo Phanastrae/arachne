@@ -49,8 +49,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 public class ArachneClient implements ClientModInitializer {
-
-    public static RunnableQueue runnableQueueClient = new RunnableQueue(4);
+    public static RunnableQueue runnableQueueClient = new RunnableQueue("arachne_client", 4);
 
     @Override
     public void onInitializeClient() {

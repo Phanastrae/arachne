@@ -18,10 +18,10 @@ public class RunnableQueue {
 
     Thread[] threads;
 
-    public RunnableQueue(int threadCount) {
+    public RunnableQueue(String name, int threadCount) {
         this.threads = new Thread[threadCount];
         for(int i = 0; i < threadCount; i++) {
-            this.threads[i] = new Thread(null, this::threadAction, "arachne_queue_"+i, 0);
+            this.threads[i] = new Thread(null, this::threadAction, name+"_queue_"+i, 0);
             this.threads[i].start();
         }
     }

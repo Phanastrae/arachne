@@ -16,7 +16,7 @@ import phanastrae.arachne.networking.SketchUpdateC2SPacket;
 import phanastrae.arachne.thread.RunnableQueue;
 
 public class Arachne implements ModInitializer {
-    public static RunnableQueue runnableQueue = new RunnableQueue(4);
+    public static RunnableQueue runnableQueue = new RunnableQueue("arachne", 4);
 
     public static final Logger LOGGER = LoggerFactory.getLogger("Arachne");
 
