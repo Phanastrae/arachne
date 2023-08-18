@@ -97,7 +97,6 @@ public class ArachneClient implements ClientModInitializer {
             public CompletableFuture<List<NbtCompound>> load(ResourceManager manager, Profiler profiler, Executor executor) {
                 return CompletableFuture.supplyAsync(() -> {
                     Map<Identifier, List<Resource>> map = manager.findAllResources("arachne_weaves", (a)->true);
-                    Arachne.LOGGER.info("um"+map.values());
                     List<NbtCompound> nbtList = new ArrayList<>();
                     map.forEach((identifier, resources) -> {
                         for(Resource res : resources) {
