@@ -15,6 +15,8 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import phanastrae.arachne.Arachne;
+import phanastrae.arachne.ArachneClient;
 import phanastrae.arachne.render.BufferHolders;
 import phanastrae.arachne.weave.WeaveRenderer;
 
@@ -29,6 +31,8 @@ public class WorldRendererMixin {
 
     @Inject(method = "reload()V", at = @At("HEAD"))
     public void arachne_onReload(CallbackInfo ci) {
+        Arachne.runnableQueue.waitUntilEmpty();
+        ArachneClient.runnableQueueClient.waitUntilEmpty();
         BufferHolders.releaseAll();
     }
 

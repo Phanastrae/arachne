@@ -23,6 +23,8 @@ public class MinecraftClientMixin {
 
     @Inject(method = "stop", at = @At("HEAD"))
     public void arachne_cleanupOnClose(CallbackInfo ci) {
+        Arachne.runnableQueue.waitUntilEmpty();
+        ArachneClient.runnableQueueClient.waitUntilEmpty();
         BufferHolders.releaseAll();
         ArachneClient.runnableQueueClient.close();
         Arachne.runnableQueue.close();
@@ -33,6 +35,8 @@ public class MinecraftClientMixin {
         Profiler profiler = MinecraftClient.getInstance().getProfiler();
         profiler.push("arachne_tidyBuffers");
         if(BufferHolders.timeFromRelease() > 5E9) { // check to release unused buffers every 5 seconds
+            Arachne.runnableQueue.waitUntilEmpty();
+            ArachneClient.runnableQueueClient.waitUntilEmpty();
             BufferHolders.releaseUnused();
         }
         profiler.pop();

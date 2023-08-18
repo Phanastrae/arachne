@@ -15,11 +15,15 @@ public class RunnableQueue {
     Lock lock = new ReentrantLock();
 
     final Object syncObject = new Object();
+    final Object syncObject2 = new Object();
+
+    int activeThreads;
 
     Thread[] threads;
 
     public RunnableQueue(String name, int threadCount) {
         this.threads = new Thread[threadCount];
+        this.activeThreads = threadCount;
         for(int i = 0; i < threadCount; i++) {
             this.threads[i] = new Thread(null, this::threadAction, name+"_queue_"+i, 0);
             this.threads[i].start();
@@ -75,16 +79,40 @@ public class RunnableQueue {
     public void threadAction() {
         while (!this.shouldClose) {
             try {
-                Runnable r = this.getNext();
+                Runnable r;
+                r = this.getNext();
                 while(r == null) {
+                    synchronized (syncObject2) {
+                        activeThreads -= 1;
+                        syncObject2.notifyAll();
+                    }
                     synchronized (syncObject) {
                         syncObject.wait();
+                    }
+                    synchronized (syncObject2) {
+                        activeThreads += 1;
                     }
                     r = this.getNext();
                 }
                 r.run();
             } catch (InterruptedException ignored) {
             }
+        }
+    }
+
+    public void waitUntilEmpty() {
+        synchronized (syncObject2) {
+            if (activeThreads == 0 && this.queue.isEmpty()) {
+                return;
+            }
+        }
+        try {
+            synchronized (syncObject2) {
+                while(activeThreads > 0 || !this.queue.isEmpty()) {
+                    syncObject2.wait();
+                }
+            }
+        } catch (InterruptedException ignored) {
         }
     }
 }
