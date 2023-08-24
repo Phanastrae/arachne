@@ -40,14 +40,14 @@ public class RunnableQueue {
     }
 
     public void queue(Runnable runnable) {
-        this.lock();
-        try {
-            queue.add(runnable);
-            synchronized (syncObject) {
+        synchronized (syncObject) {
+            this.lock();
+            try {
+                queue.add(runnable);
                 syncObject.notifyAll();
+            } finally {
+                this.unlock();
             }
-        } finally {
-            this.unlock();
         }
     }
 
@@ -63,6 +63,17 @@ public class RunnableQueue {
             this.unlock();
         }
         return r;
+    }
+
+    public boolean queueEmpty() {
+        boolean b;
+        this.lock();
+        try {
+            b = this.queue.isEmpty();
+        } finally {
+            this.unlock();
+        }
+        return b;
     }
 
     public void close() {
@@ -81,19 +92,19 @@ public class RunnableQueue {
         while (!this.shouldClose) {
             try {
                 Runnable r;
-                r = this.getNext();
-                while(r == null) {
-                    synchronized (syncObject2) {
-                        activeThreads -= 1;
-                        syncObject2.notifyAll();
-                    }
-                    synchronized (syncObject) {
-                        syncObject.wait();
-                    }
-                    synchronized (syncObject2) {
-                        activeThreads += 1;
-                    }
+                synchronized (syncObject) {
                     r = this.getNext();
+                    while (r == null) {
+                        synchronized (syncObject2) {
+                            activeThreads -= 1;
+                            syncObject2.notifyAll();
+                        }
+                        syncObject.wait();
+                        synchronized (syncObject2) {
+                            activeThreads += 1;
+                        }
+                        r = this.getNext();
+                    }
                 }
                 r.run();
             } catch (InterruptedException ignored) {
@@ -103,14 +114,23 @@ public class RunnableQueue {
 
     public void waitUntilEmpty() {
         synchronized (syncObject2) {
-            if (activeThreads == 0 && this.queue.isEmpty()) {
+            if (activeThreads == 0 && queueEmpty()) {
                 return;
             }
         }
         try {
-            synchronized (syncObject2) {
-                while(activeThreads > 0 || !this.queue.isEmpty()) {
-                    syncObject2.wait();
+            while(true) {
+                // make sure no threads are waiting
+                synchronized (syncObject) {
+                    syncObject.notifyAll();
+                }
+
+                synchronized (syncObject2) {
+                    if(activeThreads == 0 && queueEmpty()) {
+                        break;
+                    } else {
+                        syncObject2.wait(1);
+                    }
                 }
             }
         } catch (InterruptedException ignored) {
