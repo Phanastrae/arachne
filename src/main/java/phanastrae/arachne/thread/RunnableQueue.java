@@ -26,6 +26,7 @@ public class RunnableQueue {
         this.activeThreads = threadCount;
         for(int i = 0; i < threadCount; i++) {
             this.threads[i] = new Thread(null, this::threadAction, name+"_queue_"+i, 0);
+            this.threads[i].setDaemon(true);
             this.threads[i].start();
         }
     }

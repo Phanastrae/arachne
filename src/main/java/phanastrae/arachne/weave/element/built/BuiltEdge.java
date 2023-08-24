@@ -40,6 +40,7 @@ public class BuiltEdge implements ForceAdder {
         double oy = node1.y - node2.y;
         double oz = node1.z - node2.z;
         double distance = Math.sqrt(ox*ox+oy*oy+oz*oz);
+        if(this.pullOnly && distance <= length) return;
         double multiplier = this.stiffness * (1 - length / distance);
         ox *= multiplier;
         oy *= multiplier;

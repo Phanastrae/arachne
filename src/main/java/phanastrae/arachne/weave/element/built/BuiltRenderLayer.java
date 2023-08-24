@@ -40,8 +40,8 @@ public class BuiltRenderLayer {
 
     public BuiltRenderLayer(SketchRenderMaterial renderMaterial) {
         this.r = renderMaterial.getR()&0xff;
-        this.b = renderMaterial.getG()&0xff;
-        this.g = renderMaterial.getB()&0xff;
+        this.g = renderMaterial.getG()&0xff;
+        this.b = renderMaterial.getB()&0xff;
         this.a = renderMaterial.getA()&0xff;
         this.namespace = renderMaterial.getNamespace();
         this.path = renderMaterial.getPath();
