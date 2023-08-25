@@ -401,14 +401,21 @@ public class WeaveRenderer {
         ByteBuffer vb;
         if(layer.vertexBufferHolder instanceof VertexBufferHolder vbh) {
             vertexBuffer = vbh.getBuffer();
+            if(vertexBuffer.isClosed()) {
+                return;
+            }
         } else {
             return;
         }
         if(instance.layerToBufferHolderMap.get(layer) instanceof ByteBufferHolder bbh) {
             vb = bbh.getBuffer();
+            if(bbh.isReleased()) {
+                return;
+            }
         } else {
             return;
         }
+
 
         GlStateManager._glBindBuffer(GlConst.GL_ARRAY_BUFFER, ((VertexBufferAccessor)vertexBuffer).getVertexBufferId());
         RenderSystem.glBufferData(GlConst.GL_ARRAY_BUFFER, vb, GlConst.GL_DYNAMIC_DRAW);
